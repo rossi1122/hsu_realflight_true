@@ -1,0 +1,9 @@
+1.打開terminal
+輸入   roslaunch mavros apm.launch
+
+2.到
+gimbal_comp_pid_logging資料夾
+打開terminal
+輸入
+python3 run_vision_flight.py --static #靜止版
+python3 run_vision_flight.py --moving #移動版

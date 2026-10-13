@@ -1,0 +1,16 @@
+xwing_virtual (純虛擬軌跡, 無相機/雲台) 啟動步驟
+
+1.打開terminal
+輸入   roslaunch mavros apm.launch
+
+2.到專案資料夾
+打開terminal
+輸入
+python3 xwing_virtual_flight.py --moving   #移動版 (預設)
+python3 xwing_virtual_flight.py --static   #靜止版
+
+(不需要接相機 / SIYI 雲台; 不會錄影)
+
+在家先跑 (不需要 ROS):
+python3 xwing_virtual_sim.py      #各段距離
+python3 xwing_virtual_route.py    #路線圖 + Mission Planner 航點

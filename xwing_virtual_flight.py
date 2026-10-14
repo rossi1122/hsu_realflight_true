@@ -32,6 +32,8 @@ xwing_virtual_flight.py — xwing_virtual 實飛主程式 (純虛擬軌跡, 無�
   python3 xwing_virtual_flight.py --static        # 靜止目標 (停在起點)
   python3 xwing_virtual_flight.py --bench         # 掛機: 忽略 AGL 進入條件
   python3 xwing_virtual_flight.py --dive-hold-heading   # 版本 B
+  python3 xwing_virtual_flight.py --vision-uart         # + 接收對方雲台視覺 (只記錄)
+  python3 xwing_virtual_flight.py --vision-uart --gimbal-cmd   # + 依任務狀態送模式鍵
 """
 
 import argparse
@@ -52,6 +54,7 @@ from dive_guidance import MissionStateMachine
 from attitude_bridge import ArduPilotAttitudeBridge, AttitudeBridgeConfig
 from virtual_source import VirtualSource
 from virtual_target_geom import gps_to_ned, extrapolate_impact, miss_distance
+from xwing_uart_vision import VISION_CSV_FIELDS, vision_row, gimbal_state_label
 
 try:
     import rospy
@@ -107,6 +110,8 @@ CSV_FIELDS = [
     'lat', 'lon', 'tgt_lat', 'tgt_lon',
     'ctrl_ms',
 ]
+# 雲台視覺 UART (對方 Orin NX) — 只記錄, 不進控制. 未啟用時欄位留空.
+CSV_FIELDS += VISION_CSV_FIELDS
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -346,6 +351,12 @@ def main():
                     help='版本 B: DIVE 不修 yaw, 凍結進 DIVE 那刻的航向')
     ap.add_argument('--case', type=str, default=None,
                     help='自訂 case 標籤加進檔名')
+    ap.add_argument('--vision-uart', action='store_true',
+                    help='啟用雲台視覺 UART 接收 (只記錄, 不進控制)')
+    ap.add_argument('--vision-port', type=str, default=None,
+                    help='視覺 UART 串口 (覆寫 VISION_UART_PORT, 例 /dev/ttyUSB0)')
+    ap.add_argument('--gimbal-cmd', action='store_true',
+                    help='依任務狀態送模式鍵給對方雲台 (GIMBAL_MODE_KEYS)')
     args = ap.parse_args()
 
     cfg = XwingVirtualConfig()
@@ -394,6 +405,26 @@ def main():
 
     bcfg = apply_bridge_cfg(AttitudeBridgeConfig(), cfg)
     bridge = ArduPilotAttitudeBridge(dive_angle_deg=cfg.DIVE_ANGLE_DEG, cfg=bcfg)
+
+    # ── 雲台視覺 UART (對方 Orin NX → USB-UART). 只記錄, 控制仍用虛擬目標 ──
+    vision = None
+    gimbal_cmd = bool(args.gimbal_cmd or cfg.GIMBAL_MODE_CMD_ENABLED)
+    if args.vision_uart or cfg.VISION_UART_ENABLED:
+        from xwing_uart_vision import UartVisionLink
+        vport = args.vision_port or cfg.VISION_UART_PORT
+        try:
+            vision = UartVisionLink(vport, cfg.VISION_UART_BAUD,
+                                    mode_resend_s=cfg.GIMBAL_MODE_RESEND_S,
+                                    mode_max_tries=cfg.GIMBAL_MODE_MAX_TRIES)
+            vision.start()
+            print(f"[xwing] 雲台視覺 UART: {vport} @ {cfg.VISION_UART_BAUD} "
+                  f"(只記錄); 模式鍵 {'ON' if gimbal_cmd else 'OFF'}")
+        except ImportError as e:
+            print(f"[xwing] ★ 雲台視覺 UART 無法啟用: {e} — 繼續飛 (只用虛擬目標)")
+            vision = None
+    elif gimbal_cmd:
+        print("[xwing] ★ --gimbal-cmd 需要同時開 --vision-uart, 已忽略")
+        gimbal_cmd = False
 
     print("[xwing] 等待 GPS fix ...")
     t_wait = time.time()
@@ -449,7 +480,11 @@ def main():
           f"Vmax {cfg.PULLOUT_VMAX_MPS:.0f}m/s 推頭 {predive_dist:.0f}m")
     event(f"目標={'移動' if moving else '靜止'} 起點 {start_gps} "
           f"方位 {heading:.1f}° 速度 {speed} m/s  前置瞄準 "
-          f"{'ON' if gcfg.DIVE_TARGET_LEAD else 'OFF'}  (無視覺: 虛擬軌跡控制)")
+          f"{'ON' if gcfg.DIVE_TARGET_LEAD else 'OFF'}  (控制: 虛擬軌跡)")
+    event(f"雲台視覺 UART: "
+          + (f"{vision.port} @ {vision.baud} 只記錄; 模式鍵 "
+             f"{'ON ' + str(cfg.GIMBAL_MODE_KEYS) if gimbal_cmd else 'OFF'}"
+             if vision is not None else "未啟用"))
 
     _sync_run = {'on': True}
 
@@ -477,6 +512,10 @@ def main():
     mode_prev = sm.mode
     last_print = 0.0
     err_count = 0
+    vis_last_rid = None          # 上一拍的辨識結果編號 (判斷 vis_new)
+    gimbal_state_prev = None     # 上一次送給雲台的任務狀態
+    vis_down = False             # 視覺資料鏈目前是否判定中斷
+    vis_check_t = 0.0
     scored = {'done': False}
     _miss_warned = False
     pid_last_t = None
@@ -598,6 +637,35 @@ def main():
                               hdg_valid=s['compass_hdg'] is not None)
                 _ctrl_ms = (time.monotonic() - _tick_mono) * 1000.0
 
+                # ── 雲台視覺: 任務狀態 → 模式鍵; 最新封包 → log (不進控制) ──
+                _gstate = gimbal_state_label(s['guided'], sm.mission_armed,
+                                             out['mode'])
+                if vision is not None and _gstate != gimbal_state_prev:
+                    gimbal_state_prev = _gstate
+                    if gimbal_cmd:
+                        _key = cfg.GIMBAL_MODE_KEYS.get(_gstate)
+                        vision.request_mode(_key)
+                        event(f"雲台狀態 → {_gstate}: 模式鍵 "
+                              + (repr(_key) if _key is not None else "不要求"))
+                _mono = time.monotonic()
+                _vpkt = vision.latest() if vision is not None else None
+                _vrow, vis_last_rid = vision_row(
+                    vision, _vpkt, vis_last_rid, _mono, fx, fy, cx, cy,
+                    _gstate, cfg.VISION_STALE_S)
+                if vision is not None and t - vis_check_t >= 1.0:
+                    vis_check_t = t
+                    _age = (_mono - _vpkt['rx_mono']) if _vpkt else None
+                    _down = _age is None or _age > cfg.VISION_STALE_S
+                    if _down and not vis_down:
+                        event(f"★★ 雲台視覺資料鏈中斷: "
+                              + (f"{_age:.1f}s 沒收到有效封包" if _age is not None
+                                 else "尚未收到任何有效封包")
+                              + f" (CRC 錯 {vision.stats['crc']}, 串口錯 "
+                              f"{vision.stats['serial_err']}) ← 控制不受影響")
+                    elif not _down and vis_down:
+                        event("雲台視覺資料鏈恢復")
+                    vis_down = _down
+
                 # ── 主 log ──
                 dt_loop = (t - pid_last_t) if pid_last_t is not None else 0.0
                 pid_last_t = t
@@ -695,6 +763,7 @@ def main():
                     'tgt_lat': round(_tlat, 7), 'tgt_lon': round(_tlon, 7),
                     'ctrl_ms': round(_ctrl_ms, 2),
                 }
+                row.update(_vrow)
                 writer.writerow(row)
 
                 if t - last_print >= 1.0:
@@ -703,11 +772,17 @@ def main():
                     _nr = s['fc_nav_roll_deg']
                     _fc = (f" | FC nav_pitch={_np:+6.1f} nav_roll={_nr:+6.1f}"
                            if _np is not None else " | FC nav_* 無資料")
+                    _vs = ''
+                    if vision is not None:
+                        _vs = (f" | VIS link={_vrow['vis_link']} "
+                               f"det={_vrow['vis_valid'] if _vrow['vis_valid'] != '' else '-'} "
+                               f"gmode={_vrow['vis_gimbal_mode'] if _vrow['vis_gimbal_mode'] != '' else '-'}"
+                               f"(req {_vrow['gimbal_mode_req'] or '-'})")
                     print(f"[{out['mode']:8s}] t={t:6.1f} AGL={agl or 0:6.1f} "
                           f"V={V:5.1f} 到目標={vfields['ground_m']:6.0f}m "
                           f"pitch={out['pitch_cmd_deg']:+6.1f} "
                           f"hdg={out['heading_cmd_deg']:6.1f} g={int(s['guided'])}"
-                          + _fc)
+                          + _fc + _vs)
 
                 if sm.pullout_snapshot is not None and not scored['done']:
                     scored['done'] = True
@@ -732,6 +807,12 @@ def main():
             bridge.stop()
         except Exception:
             pass
+        if vision is not None:
+            try:
+                vision.stop()
+                event(f"雲台視覺 UART 統計: {vision.stats}")
+            except Exception:
+                pass
         event(f"程式結束 mode={sm.mode} errors={err_count} "
               f"時長 {time.time() - t0:.1f}s")
         _sync_run['on'] = False

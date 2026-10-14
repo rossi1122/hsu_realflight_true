@@ -41,6 +41,11 @@
 | `xwing_virtual_PREFLIGHT_PARAMS.md` | `PREFLIGHT_PARAMS.md` | 飛控參數對齊表 (新數值) |
 | `xwing_virtual_RUN_CASES.md` | `RUN_CASES.md` | 到場地執行小抄 (新指令) |
 | `xwing_virtual_prepare.txt` | `prepare.txt` | 開機啟動步驟 |
+| `xwing_virtual_RUDDER_BENCH.md` | (新) | X-wing 方向舵掛機測試流程 |
+| `xwing_virtual_GIMBAL_UART.md` | (新) | ★ 對方實驗室雲台視覺 UART 整合說明 (接線、協定、任務狀態回傳、待確認問題) |
+| `xwing_uart_vision.py` | (新) | 背景執行緒接收雲台視覺 UART (v6/v7)、送模式鍵；目前只記錄，不進控制 |
+| `xwing_uart_sender_sim.py` | (新) | 模擬對方 Orin NX 發送端，沒有硬體也能測 |
+| `uart_mipi_receiver.py` | 對方提供 (未修改) | UART 協定定義與獨立接收測試程式 |
 
 ### 1.2 沿用、**完全沒改**的原模組
 

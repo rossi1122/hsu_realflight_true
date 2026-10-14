@@ -158,6 +158,34 @@ class XwingVirtualConfig:
     STATIC_PREDIVE_DIST_M = PREDIVE_DIST_M   # ★ 靜止版 415.69 m     原 257
 
     # ════════════════════════════════════════════════════════════
+    #  雲台視覺 UART (對方實驗室 Orin NX → USB-UART → 本機)
+    #  協定見 uart_mipi_receiver.py, 整合說明見 xwing_virtual_GIMBAL_UART.md
+    #  ★ 目前只「接收 + 記錄」, 不進飛機控制 (控制仍是虛擬目標).
+    # ════════════════════════════════════════════════════════════
+    VISION_UART_ENABLED = False      # True 或命令列 --vision-uart 才啟用
+    VISION_UART_PORT = '/dev/ttyUSB0'
+    #   ⚠ 建議改成固定名稱 /dev/serial/by-id/usb-...,
+    #     ttyUSB0/1 的編號開機時可能互換 (尤其飛控也走 USB 時).
+    VISION_UART_BAUD = 115200        # 必須與對方發送端相同
+    VISION_STALE_S = 2.0             # 超過這麼久沒收到有效封包 → 告警
+
+    # ── 依任務狀態送模式鍵給對方雲台 ──
+    #   對方協定目前只有 ASCII '0'=手動 '1'=追蹤 '2'=鎖定, 沒有 FPV (機身固定).
+    #   ★ 預設關閉: 模式對應要先跟對方確認, 見 xwing_virtual_GIMBAL_UART.md 第 4 節.
+    GIMBAL_MODE_CMD_ENABLED = False  # True 或命令列 --gimbal-cmd 才送
+    GIMBAL_MODE_KEYS = {             # 任務狀態 → 模式鍵 (None = 不要求, 交給對方)
+        'STANDBY':  None,            # 還沒撥 GUIDED: 對方自行處理 (原版: FOLLOW 看前方)
+        'SEARCH':   '1',             # 追蹤目標 (原版: FOLLOW + 追蹤)
+        'PRE_DIVE': '1',             # 追蹤目標 (原版: FOLLOW + 追蹤)
+        'DIVE':     None,            # ★ 原版: FPV 機身固定. 對方新增 FPV 鍵後填入
+        'PULLOUT':  None,
+        'DONE':     None,
+        'ABORT':    None,
+    }
+    GIMBAL_MODE_RESEND_S = 1.0       # 沒收到對方回報同一模式 → 隔多久重送
+    GIMBAL_MODE_MAX_TRIES = 3        # 最多送幾次
+
+    # ════════════════════════════════════════════════════════════
     #  輸出 / 斷電保護
     # ════════════════════════════════════════════════════════════
     OUT_DIR = 'flight_logs'

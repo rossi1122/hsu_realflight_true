@@ -128,7 +128,7 @@
 俯衝角   DIVE_ANGLE_DEG        = 30°             (原 25)
 拉平     PULLOUT_AGL_M         = 120 m           (原 70)
 速度上限 PULLOUT_VMAX_MPS      = 60 m/s          (原 30)
-推頭距離 PREDIVE_DIST_M        = 400 m 移動 / 435 m 靜止 (原 257)
+推頭距離 PREDIVE_DIST_M        = 240/tan30° = 415.69 m (移動/靜止同值, 原 257)
 ABORT    ABORT_MIN_AGL_M       = 100 m           (原 55)
 巡航速   V_CRUISE_MPS          = 30 m/s          (原 20)
 SEARCH   SEARCH_SPEED_MPS      = 30 m/s          (原 16)

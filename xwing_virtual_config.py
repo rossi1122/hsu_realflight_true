@@ -19,8 +19,8 @@ xwing_virtual_config.py — xwing_virtual 版全部參數 (純虛擬軌跡, 無�
   SEARCH_SPEED_MPS   16 → 30      SEARCH 空速 (= AUTO 巡航)
   TECS_SPEED_MPS     18 → 30      拉平後空速
   PULLOUT_VMAX_MPS   30 → 60      超速提前拉平門檻 (= 速度上限)
-  PREDIVE_DIST_M    257 → 400     推頭距離 (移動版, 模擬校正)
-  STATIC_PREDIVE_DIST_M 257 → 435 推頭距離 (靜止版, 模擬校正)
+  PREDIVE_DIST_M    257 → 415.69  推頭距離 = 240 / tan30° (移動版)
+  STATIC_PREDIVE_DIST_M 257 → 415.69 推頭距離 = 240 / tan30° (靜止版)
   目標座標          換成新場地 (見下方「虛擬目標」)
   其餘視覺 / 相機 / 雲台 / YOLO / 錄影參數全部移除.
 """
@@ -138,8 +138,8 @@ class XwingVirtualConfig:
     #   (與原版行為相同). 若要停在航向點, 改 True.
     MOVING_STOP_AT_HEADING_GPS = False
     MOVING_TARGET_LEAD = False  # 前置瞄準 (沿用: 關)
-    #   模擬比較 (推頭 400 m): 關 → 俯衝 ≈ −30°, 外插 miss ≈ 68 m (打在車後);
-    #                          開 → 俯衝 ≈ −24°, 外插 miss ≈ 6 m.
+    #   模擬比較 (推頭 415.69 m): 關 → 俯衝 ≈ −28.8°, 外插 miss ≈ 70 m (打在車後);
+    #                             開 → 俯衝 ≈ −23.2°, 外插 miss ≈ 6 m.
     #   原版關掉是因為真實相機視野會丟車; 純虛擬沒有這個限制, 要開請
     #   同時把 PREDIVE_DIST_M 降低 (俯衝會變淺), 先用模擬確認.
 
@@ -147,16 +147,15 @@ class XwingVirtualConfig:
     TARGET_GPS = MOVING_START_GPS
 
     # ★ 推頭距離: 飛機到目標水平距 ≤ 此值 → PRE_DIVE (直接命令 -30°)
-    #   純幾何: 240 / tan30° = 415.7 m (假設瞬間推頭, 目標不動)
-    #   靜止: 推頭約 1.4 s 水平多飛 ~43 m → 要比幾何值【大】→ 435 m
-    #   移動: 追擊時目標往前跑, 視線越來越淺, PID 跟著把俯衝拉淺
-    #         → 要比幾何值【小】才平均 30° → 400 m
-    #   (xwing_virtual_sim.py --sweep / --static --sweep 掃出來的值:
-    #    DIVE 平均航跡角 ≈ −30°.)
-    #   ★ 實飛後依 log 的 glide_slope_err_deg 微調:
-    #     DIVE 平均比 −30° 陡 → 加大; 比 −30° 淺 → 減小 (每 10 m ≈ 0.6°).
-    PREDIVE_DIST_M = 400.0          # ★ 移動版                   原 257
-    STATIC_PREDIVE_DIST_M = 435.0   # ★ 靜止版                   原 257
+    #   = 巡航高度 / tan(俯衝角) = 240 / tan30° = 415.69 m (純幾何, 使用者指定)
+    #   直接由 CRUISE_AGL_M / DIVE_ANGLE_DEG 算出, 改高度或角度會自動跟著變.
+    #   移動 / 靜止共用同一個值.
+    #   (模擬參考: 移動目標 DIVE 平均 ≈ −28.8°, 靜止 ≈ −31.2°, 原因是推頭
+    #    需要 ~1.4 s 及追擊時視線變淺. 實飛後可依 log 的 glide_slope_err_deg
+    #    用 --predive-dist 微調: 比 −30° 陡 → 加大; 淺 → 減小, 每 10 m ≈ 0.6°.)
+    PREDIVE_DIST_M = CRUISE_AGL_M / math.tan(math.radians(DIVE_ANGLE_DEG))
+    #                               ★ 移動版 415.69 m               原 257
+    STATIC_PREDIVE_DIST_M = PREDIVE_DIST_M   # ★ 靜止版 415.69 m     原 257
 
     # ════════════════════════════════════════════════════════════
     #  輸出 / 斷電保護
@@ -169,6 +168,12 @@ class XwingVirtualConfig:
             if not hasattr(self, k):
                 raise KeyError(f"XwingVirtualConfig 沒有參數 {k}")
             setattr(self, k, v)
+        # 推頭距離由高度 / 俯衝角導出: 只覆寫了高度或角度時重新算
+        if ({'CRUISE_AGL_M', 'DIVE_ANGLE_DEG'} & set(overrides)
+                and 'PREDIVE_DIST_M' not in overrides):
+            self.PREDIVE_DIST_M = self.predive_ground_range_m
+            if 'STATIC_PREDIVE_DIST_M' not in overrides:
+                self.STATIC_PREDIVE_DIST_M = self.PREDIVE_DIST_M
 
     # ------------------------------------------------------------------
     def intrinsics_at_zoom(self, z):

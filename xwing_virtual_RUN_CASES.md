@@ -81,7 +81,7 @@ python3 xwing_virtual_flight.py --static
 python3 xwing_virtual_flight.py --static --dive-hold-heading
 ```
 
-臨時改推頭距離：`--predive-dist 410`。臨時改目標起點：`--start lat,lon` (移動) / `--target lat,lon` (靜止)。
+臨時改推頭距離：`--predive-dist 420`。臨時改目標起點：`--start lat,lon` (移動) / `--target lat,lon` (靜止)。
 
 ---
 
@@ -94,17 +94,17 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
 
 | 段 | 觸發 | 預計 (移動 / 靜止) |
 |---|---|---|
-| SEARCH | 撥 GUIDED | 15 s / 450 m ・ 8.8 s / 265 m |
-| PRE_DIVE | 到目標水平距 ≤ 400 m (靜止 435 m) | 1.4 s / 43 m |
-| DIVE | pitch 到 −27° 內 | 5.3 s / 179 m，空速 32 → 46 m/s |
+| SEARCH | 撥 GUIDED | 14.2 s / 426 m ・ 9.5 s / 284 m |
+| PRE_DIVE | 到目標水平距 ≤ 415.69 m (= 240/tan30°) | 1.4 s / 43 m |
+| DIVE | pitch 到 −27° 內 | 5.4 s / 187 m，空速 32 → 46 m/s |
 | PULLOUT | AGL ≤ 120 m (預測 0.5 s) 或空速 ≥ 60 m/s | 0.5 s |
 | DONE | TECS 120 m / 30 m/s 平飛往南 | 最低約 100 m 後回 120 m |
 
 5. 看到 `MODE: PULLOUT → DONE` 之後，**撥回 AUTO** (飛機會爬回 240 m 回跑道) 或照 SOP 處理。
 
-> 如果撥 GUIDED 的位置比 WP2 晚 (離目標更近)，SEARCH 會變短；離目標起點不到 400 m
-> (移動) / 435 m (靜止) 時，一撥下去就會直接推頭，沒有 SEARCH 段讓航向和 TECS 穩定。
-> 建議 SEARCH 至少 8–10 s，也就是撥 GUIDED 時離目標起點至少約 560 m (移動) / 700 m (靜止)。
+> 如果撥 GUIDED 的位置比 WP2 晚 (離目標更近)，SEARCH 會變短；離目標起點不到 415.69 m
+> 時，一撥下去就會直接推頭，沒有 SEARCH 段讓航向和 TECS 穩定。
+> 建議 SEARCH 至少 8–10 s，也就是撥 GUIDED 時離目標起點至少約 575 m (移動) / 655 m (靜止)。
 
 ---
 
@@ -113,7 +113,7 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
 ```
 [xwing] 移動目標: 起點 (23.7221111, 120.3798889) 方位 180.3° 速度 10.0 m/s ...
 [xwing] 巡航 240 m / 30 m/s, 俯衝 30° → 120 m 拉平, 速度上限 60 m/s
-[xwing] 推頭門檻: 到目標水平距 ≤ 400 m (純幾何 416 m)
+[xwing] 推頭門檻: 到目標水平距 ≤ 416 m (純幾何 416 m)
 [Bridge] PTCH_LIM_MIN_DEG=-40° OK (需求 -40°)
 [Bridge] GUIDED_P=... → 43002 航向控制可用 (SEARCH 走 bank turn)
 [Bridge] GUIDED_TIMEOUT=0.5s OK
@@ -142,5 +142,5 @@ log 在 `flight_logs/xwing_virtual_<時間>_<case>.csv` 與 `_events.txt`：
 | 拉平最低高度 | `agl` (PULLOUT / DONE 段最小值) | 低於可接受值 → 提高 `PULLOUT_AGL_M` |
 | 最高空速 | `V` | 接近 60 → 檢查 `AIRSPEED_MAX`，考慮把 `PULLOUT_VMAX_MPS` 降到 55 |
 | 舵面是否飽和 / 振盪 | `rcout1..4`、`pid_dtheta_deg`、`rudder_sent_deg` | 振盪 → PID KP 減半 |
-| 成績 | events.txt 的 `★★★ 成績: miss` | 移動目標前置瞄準關閉時預期 ~68 m (打在車後)，靜止 ~2 m |
+| 成績 | events.txt 的 `★★★ 成績: miss` | 移動目標前置瞄準關閉時預期 ~70 m (打在車後)，靜止 ~2 m |
 | 地圖對照 | `lat/lon` (飛機)、`tgt_lat/tgt_lon` (虛擬目標) | 可直接匯入地圖 |

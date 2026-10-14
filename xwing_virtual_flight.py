@@ -22,7 +22,7 @@ xwing_virtual_flight.py — xwing_virtual 實飛主程式 (純虛擬軌跡, 無�
 任務 (參數見 xwing_virtual_config.py):
   AUTO 240 m / 30 m/s 對準 → 撥 GUIDED = 任務開始 (虛擬目標從起點出發)
   → SEARCH: 飛控 43002 朝目標直飛, TECS 定高 240 m / 30 m/s
-  → 到目標水平距 ≤ PREDIVE_DIST_M (移動 400 m / 靜止 435 m)
+  → 到目標水平距 ≤ PREDIVE_DIST_M (= 240 / tan30° = 415.69 m)
     → PRE_DIVE 直接命令 pitch −30°
   → pitch 到 −27° 內 → DIVE: 虛擬目標投影 PID 修 pitch / 方向舵
   → AGL ≤ 120 m (或空速 ≥ 60 m/s) → PULLOUT → DONE: TECS 120 m / 30 m/s

@@ -41,7 +41,9 @@
 | `xwing_virtual_README.md` | `README.md` | 本文件 |
 | `xwing_virtual_PREFLIGHT_PARAMS.md` | `PREFLIGHT_PARAMS.md` | 飛控參數對齊表 (新數值) |
 | `xwing_virtual_RUN_CASES.md` | `RUN_CASES.md` | 到場地執行小抄 (新指令) |
-| `xwing_virtual_prepare.txt` | `prepare.txt` | 開機啟動步驟 |
+| `xwing_virtual_prepare.txt` | `prepare.txt` | 開機啟動步驟 (最短版 + 指向下面兩份) |
+| `xwing_virtual_prepare_flight.txt` | (新) | 實際飛行要輸入的指令 (開機檢查、4 個 case、飛行中訊息、落地後) |
+| `xwing_virtual_prepare_ground.txt` | (新) | 地面測試要輸入的指令 (雲台鎖定 A~G、方向舵掛機) |
 | `xwing_virtual_RUDDER_BENCH.md` | (新) | X-wing 方向舵掛機測試流程 |
 | `xwing_virtual_GIMBAL_UART.md` | (新) | ★ 對方實驗室雲台視覺 UART 整合說明 (接線、協定、模式鍵對應、待確認問題) |
 | `xwing_virtual_GIMBAL_GROUND_TEST.md` | (新) | ★ 雲台鎖定模式地面測試步驟 (桌上自測 → 接線 → 看雲台轉到 −30° → 整機掛機) |

@@ -1,0 +1,199 @@
+==================================================================
+ xwing_virtual 地面測試 指令 (prepare_ground)
+ 詳細判讀與通過標準:
+   雲台鎖定模式 → xwing_virtual_GIMBAL_GROUND_TEST.md
+   方向舵掛機   → xwing_virtual_RUDDER_BENCH.md
+==================================================================
+
+順序: 雲台 A → B → C → D → E → (方向舵掛機) → 雲台 F → G
+  A 只要自己的 Orin NX
+  B~E、G 要對方 Orin NX + 雲台
+  F 和方向舵掛機 要飛機 + 飛控 + MAVROS + 室外 GPS
+
+注意: 同一個串口一次只能給一支程式用. 換下一個測試前, 先把上一支 (q 或 Ctrl+C) 關掉.
+
+
+------------------------------------------------------------------
+0. 第一次設定 (做過一次就好)
+------------------------------------------------------------------
+sudo usermod -aG dialout $USER        # 串口權限, 登出再登入才生效
+pip3 install pyserial
+python3 -m serial.tools.list_ports -v # 確認 USB-UART 有被抓到
+ls -l /dev/serial/by-id/              # 找固定名稱
+
+把固定名稱填進 xwing_virtual_config.py:
+    VISION_UART_PORT = '/dev/serial/by-id/usb-XXXX'
+→ 之後 xwing_gimbal_mode_test.py 和 xwing_virtual_flight.py 都不用打串口
+  (沒改的話: 測試工具加 --port <串口>, 主程式加 --vision-port <串口>)
+
+下面寫 <串口> 的地方 = /dev/serial/by-id/usb-XXXX (或 /dev/ttyUSB0)
+
+cd ~/hsu_realflight_true              (換成你放專案的路徑; 以下所有 terminal 都在這裡)
+
+
+------------------------------------------------------------------
+雲台 A. 桌上自測 (不需要對方硬體)
+------------------------------------------------------------------
+# Terminal 1: 模擬對方 Orin NX + 雲台
+python3 xwing_uart_sender_sim.py --pty
+    → 記下它印的「接收端請用 /dev/pts/N」
+
+# Terminal 2: 自動跑一輪 STANDBY→SEARCH→PRE_DIVE→DIVE→PULLOUT
+python3 xwing_gimbal_mode_test.py --port /dev/pts/N --auto
+
+通過: 最後印「★ 全部通過」, 串口統計 crc=0, mode_tx=2
+結束: Terminal 1 按 Ctrl+C
+
+
+------------------------------------------------------------------
+雲台 B. 接線與連線 (用對方的接收程式)
+------------------------------------------------------------------
+接線: 對方TX→我們RX, 對方RX→我們TX, GND 共接, VCC 不接 (3.3 V TTL 模組)
+
+python3 uart_mipi_receiver.py --port <串口>
+    看到 CRC=OK、模式和 pitch 有數值
+    按 2 → 請對方看雲台有沒有往下轉、模式變「鎖定」
+    按 1 → 回追蹤
+    Ctrl+C 結束 (一定要關掉, 不然下一步打不開串口)
+
+
+------------------------------------------------------------------
+雲台 C. 手動切模式, 親眼看雲台鎖到 -30 度  ★
+------------------------------------------------------------------
+機身 / 雲台放平 (手機水平儀量機身 ≈ 0 度)
+
+python3 xwing_gimbal_mode_test.py
+    (config 沒改串口的話: python3 xwing_gimbal_mode_test.py --port <串口>)
+
+按鍵 (不用按 Enter):
+    0  → 送 '0' 手動. 請對方把雲台轉到接近水平
+         符號檢查: 對方把雲台往下轉, 回報的 pitch 要變負的
+    s  → SEARCH, 送 '1' 追蹤        要看到: ✓ 對方回報 mode=1
+    p  → PRE_DIVE, 送 '2' 鎖定      要看到: ✓ 對方回報 mode=2
+                                            ✓ 鎖定到位 pitch=-29.x°
+                                            狀態列 pitch≈-30.0° [LOCKED]
+         → 手機水平儀貼相機側面, 量光軸往下幾度 (要 30 ± 2 度)
+         → 等 10 s, [LOCKED] 不能消失
+    d  → DIVE, 要印「維持 '2' (與上一狀態同鍵, 不重送)」, 雲台不動
+    1  → 回追蹤, 再按 p 重做一次鎖定
+    q  → 結束, 看總結
+
+通過: 確認 ≤ 1.0 s, 到位 ≤ 1.5 s, 到位後最大誤差 ≤ 2 度, 判定「★ 全部通過」
+log: bench_logs/gimbal_mode_test_<時間>.csv
+
+
+------------------------------------------------------------------
+雲台 D. 自動重複 5 輪
+------------------------------------------------------------------
+python3 xwing_gimbal_mode_test.py --auto --repeat 5
+
+通過: 「★ 全部通過」, 5 次到位時間都 ≤ 1.5 s, crc=0
+(要改判定: --max-confirm 1.0  --max-settle 1.5)
+
+
+------------------------------------------------------------------
+雲台 E. 鎖定是相對水平面還是相對機身  ★ 一定要做
+------------------------------------------------------------------
+雲台裝在飛機上 (實飛的裝法), 飛機放平
+
+python3 xwing_gimbal_mode_test.py
+    p  → 等 [LOCKED]
+    抬高機尾 → 機頭朝下約 15 度, 停 5 s   (記: 機身角度 / 相機實際角度 / 回報 pitch)
+    放平
+    抬高機頭約 10 度, 停 5 s              (同上)
+    q  → 結束
+
+判讀:
+    相機一直保持水平面下 30 度、回報 pitch 一直 -30  → 相對水平面 ✓ 可以飛
+    相機跟著機身一起轉                              → 相對機身 ✗ DIVE 時目標會出畫面, 要跟對方討論
+
+
+------------------------------------------------------------------
+方向舵掛機 (詳細見 xwing_virtual_RUDDER_BENCH.md)
+------------------------------------------------------------------
+安全: 拆槳、飛機固定、飛控 disarmed、遙控器 trim 歸中、室外 GPS
+
+# Terminal 1
+roslaunch mavros apm.launch
+
+# Terminal 2
+python3 test_rudder_bench.py --predict-only        # 先看預測 (不動舵面)
+python3 test_rudder_bench.py --list-channels       # 找方向舵 / 副翼 / 升降舵通道
+    (下面的 R / A / E 換成上一步找到的通道號碼; Mission Planner 先切 GUIDED)
+python3 test_rudder_bench.py --test A --rudder-ch R --aileron-ch A --elevator-ch E
+python3 test_rudder_bench.py --test B --rudder-ch R --aileron-ch A --elevator-ch E
+python3 test_rudder_bench.py --test E --rudder-ch R --elevator-ch E    # V 尾: R=V尾左, E=V尾右
+python3 test_rudder_bench.py --test C --rudder-ch R --aileron-ch A --elevator-ch E
+
+測完 → 飛控切回 MANUAL / FBWA
+沒通過或還沒測 → 實飛一律加 --dive-hold-heading
+
+
+------------------------------------------------------------------
+雲台 F. 整機掛機: 任務一進 PRE_DIVE 自動鎖定
+------------------------------------------------------------------
+安全: 拆槳、飛機固定、飛控 disarmed、遙控器油門最低搖桿不碰、室外 GPS fix
+
+1) 先在 Mission Planner 讀飛機目前 GPS: LAT, LON
+   虛擬目標起點 = (LAT + 0.0054, LON)   ← 飛機北方約 600 m, 往南開 10 m/s
+   例: 飛機在 23.7275,120.3799 → --start 23.7329,120.3799
+
+2) Terminal 1
+roslaunch mavros apm.launch
+
+3) Terminal 2 — F1 (主要): 看 PRE_DIVE 鎖定, 45 s 後會逾時 ABORT (掛機正常現象)
+python3 xwing_virtual_flight.py --moving --bench --ground-test \
+        --start <LAT+0.0054>,<LON> --tgt-heading 180 --case gimbal_bench_F1
+
+   F2 (選做): 加 --bench-dive, 確認進 DIVE 也是鎖定
+python3 xwing_virtual_flight.py --moving --bench --ground-test --bench-dive \
+        --start <LAT+0.0054>,<LON> --tgt-heading 180 --case gimbal_bench_F2
+
+   (config 沒改串口的話, 兩條指令都加 --vision-port <串口>)
+
+4) 開機要看到: 雲台視覺 UART ... 模式鍵 ON, 狀態列 VIS link=1
+5) 遙控器 / Mission Planner 切 GUIDED, 依序要看到:
+     ★ GUIDED 上升沿 — 種點 + ARM (任務開始)
+     雲台狀態 → SEARCH: 模式鍵 '1'
+     雲台回報模式 '1' 已確認
+     ... 約 18.5 s, 狀態列「到目標=」從 600 m 往下減 ...
+     ★★ MODE: SEARCH → PRE_DIVE (到目標水平距=416m)
+     雲台狀態 → PRE_DIVE: 模式鍵 '2'          ← 雲台往下轉到 -30 度停住
+     雲台回報模式 '2' 已確認
+     ★ 雲台鎖定到位 pitch=-29.x° (要求後 x.xx s, 任務狀態 PRE_DIVE)
+     狀態列尾巴: gmode=2(req 2) gpitch=-30.0 LOCKED
+   F2 會直接 SEARCH → DIVE (沒有 PRE_DIVE 那行), 進 DIVE 時送 '2', 這是掛機才有的現象
+6) 看完 → 飛控切回 MANUAL / FBWA → Terminal 2 輸入 q 按 Enter (或 Ctrl+C)
+7) 雲台會停在鎖定. 要切回: python3 xwing_gimbal_mode_test.py → 按 1 或 0 → q
+
+8) 算「進 PRE_DIVE 到鎖定到位」花多久 (把檔名換成這次的):
+python3 - flight_logs/xwing_virtual_<時間>_gimbal_bench_F1.csv <<'EOF'
+import csv, sys
+rows = list(csv.DictReader(open(sys.argv[1])))
+t_pd = next(float(r['t']) for r in rows if r['mode'] in ('PRE_DIVE', 'DIVE'))
+t_lk = next((float(r['t']) for r in rows
+             if float(r['t']) >= t_pd and r['gimbal_locked'] == '1'), None)
+print(f"進 PRE_DIVE t={t_pd:.2f}s, 鎖定到位 " +
+      (f"t={t_lk:.2f}s → 花 {t_lk - t_pd:.2f}s" if t_lk else "沒有到位"))
+EOF
+
+
+------------------------------------------------------------------
+雲台 G. 異常測試 (在 C 的測試工具或 F 的主程式執行中做)
+------------------------------------------------------------------
+G1 拔 USB-UART       → 程式不當機; 主程式 events:「★★ 雲台視覺資料鏈中斷 ... ← 控制不受影響」
+G2 插回 USB-UART     → 每 1 s 重試自動重開; events:「雲台視覺資料鏈恢復」
+                       (要用 /dev/serial/by-id/..., 用 ttyUSB0 插回後可能變 ttyUSB1)
+G3 對方重開發送程式  → 斷線 → 恢復
+G4 對方暫停雲台, 按 p → 每 1 s 重送 '2', 3 次後印警告, 程式不卡住
+G5 對方雲台斷電重開  → 記下開機後的預設模式 (我們只在任務狀態改變時送鍵, 中途重開不會補送)
+
+
+------------------------------------------------------------------
+常用小指令
+------------------------------------------------------------------
+ls /dev/ttyUSB* /dev/ttyACM*                    # 看有哪些串口
+ls -l /dev/serial/by-id/                        # 串口固定名稱
+ls -lt bench_logs/ | head                       # 最新的雲台測試 log
+ls -lt flight_logs/ | head                      # 最新的掛機 / 飛行 log
+cat flight_logs/xwing_virtual_<時間>_<case>_events.txt   # 看事件

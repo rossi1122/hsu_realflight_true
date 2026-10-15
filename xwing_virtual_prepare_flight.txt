@@ -1,0 +1,146 @@
+==================================================================
+ xwing_virtual 實際飛行 指令 (prepare_flight)
+ 240 m / 30 m/s 巡航, 30 度俯衝到 120 m 拉平, 速度上限 60 m/s
+ 控制: 純虛擬軌跡   雲台: 對方 Orin NX (UART 模式鍵)
+==================================================================
+
+★ 起飛前一定要先做完地面測試 (xwing_virtual_prepare_ground.txt):
+  - 雲台階段 C: 親眼看過雲台鎖到向下 30 度
+  - 雲台階段 E: 確認鎖定的 -30 度是「相對水平面」(相對機身的話 DIVE 時目標會出畫面)
+  - 方向舵掛機測試 (沒測過 → 實飛一律加 --dive-hold-heading)
+
+
+------------------------------------------------------------------
+0. 第一次設定 (做過一次就好)
+------------------------------------------------------------------
+找雲台 USB-UART 的固定名稱:
+    ls -l /dev/serial/by-id/
+    (例: usb-FTDI_FT232R_USB_UART_A50285BI-if00-port0 -> ../../ttyUSB0)
+
+把這個路徑填進 xwing_virtual_config.py:
+    VISION_UART_PORT = '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A50285BI-if00-port0'
+→ 之後下面的指令都不用再打 --vision-port
+  (沒改的話, 每條指令後面加  --vision-port /dev/serial/by-id/usb-XXXX)
+
+
+------------------------------------------------------------------
+1. 開機前檢查
+------------------------------------------------------------------
+[ ] 對方 Orin NX + 雲台已開機, 對方的發送程式在跑
+[ ] USB-UART 接好: 對方TX→我們RX, 對方RX→我們TX, GND 共接, VCC 不接
+[ ] 遙控器方向舵 trim 歸中
+[ ] 飛控參數 (Mission Planner) 已改好:
+      PTCH_LIM_MIN_DEG = -40      (目前 X-wing 是 -35, 要改)
+      AIRSPEED_MAX    >= 60       (目前 X-wing 是 50, 要改)
+      AIRSPEED_MIN    <= 30
+      AIRSPEED_CRUISE  = 30
+      GUIDED_TIMEOUT   = 0.5
+      圍欄 (FENCE_TYPE=4 多邊形) 要包住整條航線, 否則俯衝中碰圍欄會 RTL
+
+
+------------------------------------------------------------------
+2. Terminal 1: MAVROS
+------------------------------------------------------------------
+roslaunch mavros apm.launch
+
+
+------------------------------------------------------------------
+3. Terminal 2: 到專案資料夾, 選一個 case
+------------------------------------------------------------------
+cd ~/hsu_realflight_true          (換成你放專案的路徑)
+
+# Case 1: 移動目標 + 版本 A (DIVE 用 PID 打方向舵) ← 方向舵掛機測過才用
+python3 xwing_virtual_flight.py --moving
+
+# Case 2: 移動目標 + 版本 B (DIVE 不打方向舵, 只修 pitch) ← ★ 方向舵還沒測就用這個
+python3 xwing_virtual_flight.py --moving --dive-hold-heading
+
+# Case 3: 靜止目標 + 版本 A
+python3 xwing_virtual_flight.py --static
+
+# Case 4: 靜止目標 + 版本 B
+python3 xwing_virtual_flight.py --static --dive-hold-heading
+
+可以加在任何 case 後面的選項:
+    --vision-port /dev/serial/by-id/usb-XXXX   指定雲台串口 (config 沒改時)
+    --start 23.7221111,120.3798889             臨時改移動目標起點 (lat,lon)
+    --target 23.7221111,120.3798889            臨時改靜止目標 (lat,lon)
+    --case 名字                                 加進 log 檔名, 方便分辨
+    --no-vision                                 當天沒接雲台 (不開 UART)
+    --no-gimbal-cmd                             收雲台資料但不送模式鍵
+
+  例: 移動 + 版本 B + 指定串口 + 標記第 1 趟
+  python3 xwing_virtual_flight.py --moving --dive-hold-heading \
+          --vision-port /dev/serial/by-id/usb-XXXX --case flight1
+
+★ 實飛【不要】加: --bench  --bench-dive  --ground-test  --bench-pitch
+
+
+------------------------------------------------------------------
+4. 開機訊息檢查 (每趟都看, 有問題就不要飛)
+------------------------------------------------------------------
+要看到:
+  [xwing] 移動目標: 起點 (23.7221111, 120.3798889) 方位 180.3° 速度 10.0 m/s ...
+  [xwing] 巡航 240 m / 30 m/s, 俯衝 30° → 120 m 拉平, 速度上限 60 m/s
+  [xwing] 推頭門檻: 到目標水平距 ≤ 416 m (純幾何 416 m)
+  [xwing] 雲台視覺 UART: <串口> @ 115200 (資料只記錄); 模式鍵 ON
+  [UARTVision] 已開啟 <串口> @ 115200 8N1
+  [Bridge] PTCH_LIM_MIN_DEG=-40° OK
+  [Bridge] GUIDED_P=... → 43002 航向控制可用
+  [Bridge] GUIDED_TIMEOUT=0.5s OK
+  [xwing] AIRSPEED_MIN / AIRSPEED_MAX / AIRSPEED_CRUISE ... OK
+  每秒狀態列: [SEARCH  ] ... g=0 | VIS link=1 ...      ← link=1 才是有收到雲台資料
+
+看到下面任何一條 → 停下來處理:
+  ★★★ 找不到 GUIDED_P                 → SEARCH 會退回 legacy bank
+  ★★★ RUDDER_VERIFIED=False           → 方向舵命令全部歸零
+  ★★★ 警告: PTCH_LIM_MIN_DEG=... 淺    → 俯衝角會被飛控夾掉
+  ★★★ < 速度上限 60 m/s               → 俯衝時飛控會抬頭壓速度
+  ★★★ > SEARCH 30 m/s                 → 改速度命令會被拒
+  雲台視覺 UART 無法啟用               → 沒裝 pyserial, 不會送鍵 (pip3 install pyserial)
+  模式鍵 OFF                           → 有人加了 --no-gimbal-cmd
+  VIS link=0 一直不變                   → 沒收到雲台資料: 查接線 / 串口名稱 / 對方程式
+                                         (控制不受影響, 但雲台不會鎖定)
+
+
+------------------------------------------------------------------
+5. 飛行流程
+------------------------------------------------------------------
+1) VTOL 起飛 → AUTO 爬到 240 m 進跑道
+   畫面每秒印 [SEARCH  ] ... g=0  (還沒撥 GUIDED)
+2) 飛機轉完彎、航向已對正目標起點 (往南) 之後, 到 GUIDED 切換點撥 GUIDED
+   (撥 GUIDED 時離目標起點至少約 575 m (移動) / 655 m (靜止), SEARCH 才有 8–10 s)
+3) 之後全自動, 畫面應該依序出現:
+
+   ★ GUIDED 上升沿 — 種點 + ARM (任務開始)
+   雲台狀態 → SEARCH: 模式鍵 '1'
+   雲台回報模式 '1' 已確認 (要求後 x.xx s)              ← 雲台追蹤
+   ★★ MODE: SEARCH → PRE_DIVE (... 到目標水平距=416m ...)
+   雲台狀態 → PRE_DIVE: 模式鍵 '2'                       ← 一進推頭就送鎖定
+   雲台回報模式 '2' 已確認 (要求後 x.xx s)
+   ★ 雲台鎖定到位 pitch=-29.x° (要求後 x.xx s, 任務狀態 PRE_DIVE)
+   ★★ MODE: PRE_DIVE → DIVE
+   ★★ MODE: DIVE → PULLOUT
+   ★★ MODE: PULLOUT → DONE        (TECS 120 m / 30 m/s 平飛)
+
+   預計時間 (移動): SEARCH 約 14 s → PRE_DIVE 約 1.4 s → DIVE 約 5.4 s → PULLOUT 0.5 s
+
+4) 看到 MODE: PULLOUT → DONE 之後 → 撥回 AUTO (爬回 240 m 回跑道) 或照 SOP 處理
+
+中途出狀況:
+  ★ 最快: 遙控器直接撥離 GUIDED (FBWA / AUTO), 飛控立刻接手
+  鍵盤: Terminal 2 輸入  x  按 Enter → 程式中止並拉起 (ABORT)
+  雲台資料鏈中斷 / 模式鍵沒確認 → 只會記在 events, 飛機控制不受影響, 不用中止
+
+
+------------------------------------------------------------------
+6. 落地後
+------------------------------------------------------------------
+1) Terminal 2 輸入  q  按 Enter (或 Ctrl+C) 結束程式
+2) log 在專案的 flight_logs/ :
+     xwing_virtual_<日期_時間>_<case>.csv          主 log (50 Hz)
+     xwing_virtual_<日期_時間>_<case>_events.txt   事件 (模式切換、雲台確認 / 鎖定)
+3) 主程式結束時不會送鍵, 雲台會停在鎖定.
+   要切回追蹤 / 手動:  python3 xwing_gimbal_mode_test.py  → 按 1 或 0 → 按 q
+4) 每一趟換一個 --case 名字, 或記下時間, 之後比較方便對照
+5) 同一趟任務結束 (DONE) 後要再飛一次 → 重開程式

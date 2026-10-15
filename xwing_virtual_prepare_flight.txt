@@ -4,6 +4,8 @@
  控制: 純虛擬軌跡   雲台: 對方 Orin NX (UART 模式鍵)
 ==================================================================
 
+完整流程 (準備 → 地面測試 → 飛行 → 飛行後): xwing_virtual_FULL_TEST_PROCEDURE.md
+
 ★ 起飛前一定要先做完地面測試 (xwing_virtual_prepare_ground.txt):
   - 雲台階段 C: 親眼看過雲台鎖到向下 30 度
   - 雲台階段 E: 確認鎖定的 -30 度是「相對水平面」(相對機身的話 DIVE 時目標會出畫面)
@@ -34,7 +36,8 @@
       AIRSPEED_MAX    >= 60       (目前 X-wing 是 50, 要改)
       AIRSPEED_MIN    <= 30
       AIRSPEED_CRUISE  = 30
-      GUIDED_TIMEOUT   = 0.5
+      遙控器撥得到 GUIDED (目前 FLTMODE1~6 沒有 15, 要加; 或 RCx_OPTION=55)
+      (X-wing 韌體沒有 GUIDED_TIMEOUT 參數, 不用設)
       圍欄 (FENCE_TYPE=4 多邊形) 要包住整條航線, 否則俯衝中碰圍欄會 RTL
 
 
@@ -87,7 +90,7 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
   [UARTVision] 已開啟 <串口> @ 115200 8N1
   [Bridge] PTCH_LIM_MIN_DEG=-40° OK
   [Bridge] GUIDED_P=... → 43002 航向控制可用
-  [Bridge] GUIDED_TIMEOUT=0.5s OK
+  (X-wing 不會出現 GUIDED_TIMEOUT 那行, 正常)
   [xwing] AIRSPEED_MIN / AIRSPEED_MAX / AIRSPEED_CRUISE ... OK
   每秒狀態列: [SEARCH  ] ... g=0 | VIS link=1 ...      ← link=1 才是有收到雲台資料
 
@@ -106,7 +109,7 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
 ------------------------------------------------------------------
 5. 飛行流程
 ------------------------------------------------------------------
-1) VTOL 起飛 → AUTO 爬到 240 m 進跑道
+1) 起飛 (X-wing 不是 VTOL, 照平常方式) → AUTO 爬到 240 m 進跑道
    畫面每秒印 [SEARCH  ] ... g=0  (還沒撥 GUIDED)
 2) 飛機轉完彎、航向已對正目標起點 (往南) 之後, 到 GUIDED 切換點撥 GUIDED
    (撥 GUIDED 時離目標起點至少約 575 m (移動) / 655 m (靜止), SEARCH 才有 8–10 s)

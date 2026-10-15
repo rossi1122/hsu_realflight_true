@@ -70,7 +70,8 @@
 ### GUIDED / 航向
 | 飛控參數 | 說明 | 建議 |
 |---|---|---|
-| `GUIDED_TIMEOUT` | forced attitude 逾時 | **0.5** |
+| `GUIDED_TIMEOUT` | forced attitude 逾時 | **0.5** (X-wing 韌體沒有這個參數，用韌體內建值) |
+| `FLTMODE1~6` / `RCx_OPTION` | 遙控器要撥得到 GUIDED (15)，或用 `RCx_OPTION = 55` | X-wing 目前**沒有**，要加 |
 | `GUIDED_P` | 存在才代表韌體有 43002 航向控制 | 必須存在 |
 
 ### 姿態控制器增益 (★ 先別動)
@@ -115,7 +116,7 @@
 1. `PTCH_LIM_MIN_DEG = -40`。
 2. `AIRSPEED_MAX ≥ 60`、`AIRSPEED_MIN ≤ 30`、`AIRSPEED_CRUISE = 30`。
 3. 圍欄 `FENCE_ALT_MAX > 240`。
-4. 載入 `xwing_virtual_mission.waypoints`，前後加上 VTOL 起降。
+4. 載入 `xwing_virtual_mission.waypoints`，前後加上起降 (X-wing 不是 VTOL)。
 5. AUTO 30 m/s 巡航一圈，記下 `TRIM_THROTTLE`，填回 `THR_TRIM`。
 6. 開機看第一節那四行 OK。
 

@@ -40,7 +40,7 @@ TARGET_GPS         = MOVING_START_GPS            # 靜止版
 ### 2. 航線
 
 Mission Planner → 載入 `xwing_virtual_mission.waypoints` (240 m 跑道)，
-**自己加上 VTOL 起飛和降落航點**，並且確認：
+**自己加上起飛和降落航點** (X-wing `Q_ENABLE = 0`，不是 VTOL，照平常方式)，並且確認：
 - 跑道範圍內沒有障礙物或禁航區 (約 400 m × 1800 m，南北向)
 - 回程邊在東側；若要放西側，執行 `python3 xwing_virtual_route.py --side west` 重新產生
 
@@ -54,8 +54,9 @@ Mission Planner → 載入 `xwing_virtual_mission.waypoints` (240 m 跑道)，
 | `AIRSPEED_MAX` | **≥ 60** |
 | `AIRSPEED_MIN` | **≤ 30** |
 | `AIRSPEED_CRUISE` | **30** |
-| `GUIDED_TIMEOUT` | **0.5** |
-| `FENCE_ALT_MAX` | **> 240** |
+| `GUIDED_TIMEOUT` | **0.5** (X-wing 韌體沒有這個參數 → 不用設) |
+| 模式開關 | **撥得到 GUIDED** (X-wing 目前 `FLTMODE1~6` 沒有 15；或設 `RCx_OPTION = 55`) |
+| `FENCE_ALT_MAX` | **> 240** (只在有開高度圍欄時有用；X-wing `FENCE_TYPE = 4` 只檢查多邊形) |
 
 ### 4. 遙控器
 
@@ -96,7 +97,7 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
 
 ## 飛行流程
 
-1. VTOL 起飛 → AUTO 爬到 240 m，進跑道。
+1. 起飛 (照平常方式) → AUTO 爬到 240 m，進跑道。
 2. 程式開著，畫面會每秒印 `[SEARCH  ] ... g=0` (還沒撥 GUIDED)。
 3. 飛機轉完彎、在 **WP1 → WP2 進場邊對正往南** 之後，**飛過 WP2 (目標起點北方 700 m) 時撥 GUIDED**。
 4. 之後全自動：
@@ -125,7 +126,7 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
 [xwing] 推頭門檻: 到目標水平距 ≤ 416 m (純幾何 416 m)
 [Bridge] PTCH_LIM_MIN_DEG=-40° OK (需求 -40°)
 [Bridge] GUIDED_P=... → 43002 航向控制可用 (SEARCH 走 bank turn)
-[Bridge] GUIDED_TIMEOUT=0.5s OK
+[Bridge] GUIDED_TIMEOUT=0.5s OK         ← X-wing 沒有這個參數，不會出現這行 (正常)
 [Bridge] 方向舵迴路 ON — 限幅 ±30.0°, ...
 [xwing] AIRSPEED_MIN=.. m/s OK
 [xwing] AIRSPEED_MAX=.. m/s OK

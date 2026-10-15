@@ -44,6 +44,7 @@
 | `xwing_virtual_prepare.txt` | `prepare.txt` | 開機啟動步驟 (最短版 + 指向下面兩份) |
 | `xwing_virtual_prepare_flight.txt` | (新) | 實際飛行要輸入的指令 (開機檢查、4 個 case、飛行中訊息、落地後) |
 | `xwing_virtual_prepare_ground.txt` | (新) | 地面測試要輸入的指令 (雲台鎖定 A~G、方向舵掛機) |
+| `xwing_virtual_FULL_TEST_PROCEDURE.md` | (新) | ★ X-wing 完整測試流程：出發前準備 → 雲台 / 飛機地面測試 → 飛行 → 飛行後 |
 | `xwing_virtual_RUDDER_BENCH.md` | (新) | X-wing 方向舵掛機測試流程 |
 | `xwing_virtual_GIMBAL_UART.md` | (新) | ★ 對方實驗室雲台視覺 UART 整合說明 (接線、協定、模式鍵對應、待確認問題) |
 | `xwing_virtual_GIMBAL_GROUND_TEST.md` | (新) | ★ 雲台鎖定模式地面測試步驟 (桌上自測 → 接線 → 看雲台轉到 −30° → 整機掛機) |
@@ -261,7 +262,7 @@ roll 保護、虛擬相機內參 (1x)、`TARGET_SPEED_MPS=10`、`MOVING_TARGET_L
 - **飛過 WP2 時撥 GUIDED。** 沒撥的話，AUTO 會沿進場邊繼續飛到 WP3，再從東側繞回來重來。
 - 回程邊放東側；如果場地西側比較空，執行 `python3 xwing_virtual_route.py --side west`。
   側移 400 m 大約是 30 m/s、坡度 30° 轉彎半徑 (~160 m) 的 2.5 倍。
-- ★ **VTOL 起飛、降落航點請自己加在前後。** 跑道範圍約 400 m × 1800 m，請先確認場地、
+- ★ **起飛、降落航點請自己加在前後** (X-wing `Q_ENABLE = 0`，不是 VTOL)。 跑道範圍約 400 m × 1800 m，請先確認場地、
   空域和障礙物。
 
 ### 5.3 任務關鍵點 (移動目標，模擬)

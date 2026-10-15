@@ -686,7 +686,11 @@ def main():
                         event(f"★★ 雲台視覺資料鏈中斷: "
                               + (f"{_age:.1f}s 沒收到有效封包" if _age is not None
                                  else "尚未收到任何有效封包")
-                              + f" (CRC 錯 {vision.stats['crc']}, 串口錯 "
+                              + (f" (串口 {vision.port} 已開啟, 收 "
+                                 f"{vision.stats['bytes']} bytes" if vision.connected
+                                 else f" (★ 串口 {vision.port} 開不了 — 檢查 USB-UART"
+                                 f" 有沒有插 / 串口名稱")
+                              + f", CRC 錯 {vision.stats['crc']}, 串口錯 "
                               f"{vision.stats['serial_err']}) ← 控制不受影響")
                     elif not _down and vis_down:
                         event("雲台視覺資料鏈恢復")

@@ -118,7 +118,7 @@ class UartVisionLink:
         self._open_fail = 0
         self.stats = {'frames': 0, 'clock': 0, 'bytes': 0, 'header': 0,
                       'crc': 0, 'payload': 0, 'discarded': 0, 'reopen': 0,
-                      'mode_tx': 0, 'serial_err': 0}
+                      'mode_tx': 0, 'serial_err': 0, 'open_fail': 0}
         self.connected = False
 
     # ------------------------------------------------------------------
@@ -194,6 +194,7 @@ class UartVisionLink:
             self._ser = None
             self.connected = False
             self._open_fail += 1
+            self.stats['open_fail'] += 1
             # 第一次與之後每 10 次才印, 避免 USB 拔掉時每秒洗版
             if self._open_fail == 1 or self._open_fail % 10 == 0:
                 self.log(f"[UARTVision] ★ 開不了 {self.port}: {e} "

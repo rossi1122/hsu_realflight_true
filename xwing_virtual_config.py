@@ -159,31 +159,41 @@ class XwingVirtualConfig:
 
     # ════════════════════════════════════════════════════════════
     #  雲台視覺 UART (對方實驗室 Orin NX → USB-UART → 本機)
-    #  協定見 uart_mipi_receiver.py, 整合說明見 xwing_virtual_GIMBAL_UART.md
-    #  ★ 目前只「接收 + 記錄」, 不進飛機控制 (控制仍是虛擬目標).
+    #  協定見 uart_mipi_receiver.py, 整合說明見 xwing_virtual_GIMBAL_UART.md,
+    #  地面測試見 xwing_virtual_GIMBAL_GROUND_TEST.md
+    #  ★ 視覺資料目前只「接收 + 記錄」, 不進飛機控制 (控制仍是虛擬目標).
+    #    雲台模式鍵則會依任務狀態實際送出 (PRE_DIVE → 鎖定).
     # ════════════════════════════════════════════════════════════
-    VISION_UART_ENABLED = False      # True 或命令列 --vision-uart 才啟用
+    VISION_UART_ENABLED = True       # 預設開; 沒接雲台時用 --no-vision 關閉
     VISION_UART_PORT = '/dev/ttyUSB0'
     #   ⚠ 建議改成固定名稱 /dev/serial/by-id/usb-...,
     #     ttyUSB0/1 的編號開機時可能互換 (尤其飛控也走 USB 時).
     VISION_UART_BAUD = 115200        # 必須與對方發送端相同
     VISION_STALE_S = 2.0             # 超過這麼久沒收到有效封包 → 告警
 
-    # ── 依任務狀態送模式鍵給對方雲台 ──
-    #   對方協定目前只有 ASCII '0'=手動 '1'=追蹤 '2'=鎖定, 沒有 FPV (機身固定).
-    #   ★ 預設關閉: 模式對應要先跟對方確認, 見 xwing_virtual_GIMBAL_UART.md 第 4 節.
-    GIMBAL_MODE_CMD_ENABLED = False  # True 或命令列 --gimbal-cmd 才送
-    GIMBAL_MODE_KEYS = {             # 任務狀態 → 模式鍵 (None = 不要求, 交給對方)
-        'STANDBY':  None,            # 還沒撥 GUIDED: 對方自行處理 (原版: FOLLOW 看前方)
-        'SEARCH':   '1',             # 追蹤目標 (原版: FOLLOW + 追蹤)
-        'PRE_DIVE': '1',             # 追蹤目標 (原版: FOLLOW + 追蹤)
-        'DIVE':     None,            # ★ 原版: FPV 機身固定. 對方新增 FPV 鍵後填入
-        'PULLOUT':  None,
+    # ── 依任務狀態送模式鍵給對方雲台 (ASCII 1 byte, 對方原協定) ──
+    #   對方雲台 (2026/10 確認):
+    #     '0' 手動
+    #     '1' 追蹤: 雲台 pitch 自動把目標維持在畫面正中心
+    #     '2' 鎖定: 雲台 pitch 固定在向下 30° (pitch 往下為負 → 回報約 −30)
+    #     雲台【只有 pitch 軸】, 沒有 yaw → 左右永遠跟機頭.
+    #   ★ 推頭距離 415.69 m 時, 從 240 m 看目標的俯角剛好 atan(240/415.69)=30°,
+    #     所以進 PRE_DIVE 切鎖定 −30°, 目標起點就在畫面中央.
+    GIMBAL_MODE_CMD_ENABLED = True   # 預設送; --no-gimbal-cmd 可關閉
+    GIMBAL_MODE_KEYS = {             # 任務狀態 → 模式鍵 (None = 不送, 維持對方目前模式)
+        'STANDBY':  None,            # 還沒撥 GUIDED: 不干涉 (對方自行操作)
+        'SEARCH':   '1',             # 追蹤: 目標留在畫面中心
+        'PRE_DIVE': '2',             # ★ 鎖定 −30°: 一進推頭就送
+        'DIVE':     '2',             # 維持鎖定 (與 PRE_DIVE 同鍵, 不會重送)
+        'PULLOUT':  None,            # 拉平後不再改 (維持鎖定)
         'DONE':     None,
         'ABORT':    None,
     }
     GIMBAL_MODE_RESEND_S = 1.0       # 沒收到對方回報同一模式 → 隔多久重送
     GIMBAL_MODE_MAX_TRIES = 3        # 最多送幾次
+    GIMBAL_LOCK_KEY = '2'            # 哪個鍵代表鎖定 (用來判斷「鎖定到位」)
+    GIMBAL_LOCK_PITCH_DEG = -30.0    # 鎖定時雲台應回報的 pitch (往下為負)
+    GIMBAL_LOCK_TOL_DEG = 2.0        # |pitch − (−30)| ≤ 此值 才算機械到位
 
     # ════════════════════════════════════════════════════════════
     #  輸出 / 斷電保護

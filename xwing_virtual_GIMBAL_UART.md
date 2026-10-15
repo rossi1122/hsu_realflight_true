@@ -3,7 +3,10 @@
 > 對象：本實驗室 (飛控 / 任務程式) 與 對方實驗室 (雲台相機 + 辨識 Orin NX)。
 > 協定來源：對方提供的 `uart_mipi_receiver.py` (UART v6 / v7，big-endian，CRC-16/CCITT-FALSE)。
 >
-> **目前狀態：只接收、記錄，不進飛機控制。** 控制仍用 GPS 虛擬目標，視覺資料先拿來比對與驗證。
+> **目前狀態：**
+> - 視覺資料**只接收、記錄，不進飛機控制**。控制仍用 GPS 虛擬目標，視覺資料先拿來比對與驗證。
+> - 雲台模式鍵**會依任務狀態實際送出**：SEARCH 送 `'1'` 追蹤，**一進 PRE_DIVE 送 `'2'` 鎖定 (向下 30°)**。
+> - 地面測試步驟見 **`xwing_virtual_GIMBAL_GROUND_TEST.md`**。
 
 ---
 
@@ -87,9 +90,11 @@ python3 uart_mipi_receiver.py --port /dev/ttyUSB0
 
 ---
 
-## 4. ★ 要不要回傳任務狀態給對方雲台？— 要
+## 4. ★ 回傳任務狀態給對方雲台：PRE_DIVE 送鎖定
 
 ### 4.1 為什麼要
+
+對方的雲台由對方控制，它不知道飛機現在在哪一個階段，**所以要由我們告訴它。**
 
 原版 (`gimbal.py`，自己控 SIYI 雲台) 依任務階段切雲台模式：
 
@@ -98,83 +103,102 @@ python3 uart_mipi_receiver.py --port /dev/ttyUSB0
 | 還沒撥 GUIDED (STANDBY) | FOLLOW，yaw=0 跟機頭，固定低頭 | 對準時目標就在畫面中央 |
 | SEARCH / PRE_DIVE | FOLLOW + **追蹤目標** | 飛機在轉彎 / 推頭時，雲台補償讓目標留在畫面內 |
 | **DIVE** | **FPV (相機固定在機身上)** | DIVE 的 PID 要的是「目標相對**機頭**偏多少」 |
-| PULLOUT / DONE | — | — |
 
 **關鍵在 DIVE**：如果 DIVE 時雲台還在追蹤，雲台會一直把目標拉回畫面中央，影像誤差永遠約等於 0。
-這時 PID 會以為已經對準，不會修正。所以要嘛雲台切成**機身固定**，要嘛要拿到雲台的完整角度
-(pitch **和 yaw**) 自己換算回機身座標。
+這時 PID 會以為已經對準，不會修正。所以 DIVE 時雲台不能再追蹤。
 
-對方的雲台由對方控制，它不知道飛機現在在哪一個階段，**所以一定要由我們告訴它。**
+### 4.2 對方雲台的模式 (2026/10 確認)
 
-### 4.2 對方現有協定的兩個缺口
-
-| 缺口 | 影響 | 需要對方 |
+| 模式鍵 | 對方模式 | 行為 |
 |---|---|---|
-| 模式只有 0 手動 / 1 追蹤 / 2 鎖定，**沒有 FPV (機身固定)** | DIVE 沒有對應的模式可以切 | 新增 FPV 模式 (例如鍵 `'3'`)，或確認「鎖定」是否就是機身固定 |
-| 遙測只有 pitch / roll，**沒有 yaw** | 雲台左右追蹤時，無法換算目標相對機頭的方位；也無法確認 FPV 時 yaw 是否歸零 | 遙測加入雲台 yaw (相對機頭) |
+| `'0'` | 手動 | pitch 停在目前角度 |
+| `'1'` | 追蹤 | pitch 自動轉，把目標固定在**畫面正中心** |
+| `'2'` | 鎖定 | pitch 固定在**向下 30°** (與我們原本的做法相同) |
 
-### 4.3 兩種做法
+- 對方雲台**只有 pitch 軸**，沒有 yaw，左右永遠跟著機頭。所以原本「遙測沒有 yaw」的缺口不存在了。
+- pitch **往下為負**：鎖定時對方回報約 **−30**。
 
-| | **做法 A：我們直接送模式鍵** (現在就能用) | **做法 B：我們送任務狀態，對方決定雲台模式** (建議長期採用) |
-|---|---|---|
-| 送什麼 | ASCII `'0'`/`'1'`/`'2'` (1 byte) | 有 CRC 的封包：任務狀態 + 建議模式 |
-| 對方要改 | 不用改 (除非新增 FPV 鍵) | 新增一種封包類型 |
-| 優點 | 現在就能測 | 有 CRC 不怕雜訊；責任清楚 (雲台怎麼動由對方決定)；對方可以記錄我們的任務狀態 |
-| 缺點 | 單一 byte 沒有檢查碼，線路雜訊可能誤切模式 | 要等對方實作 |
-| 本專案 | **已實作** (`--gimbal-cmd`，預設關閉) | 本文提出格式，雙方確認後再實作 |
+**為什麼是 PRE_DIVE 就鎖定 −30°**：推頭距離是 240 / tan 30° = 415.69 m，
+從 240 m 高看目標的俯角剛好是 atan(240 / 415.69) = **30°**。所以一進 PRE_DIVE 鎖在 −30°，
+目標正好在畫面中央。接著飛機推頭到約 −30° 進 DIVE，相機光軸大約跟機頭同方向，
+相當於原版的 FPV，DIVE 的影像誤差就是「目標相對機頭偏多少」。
 
-#### 做法 A：目前的對應 (`xwing_virtual_config.py` 的 `GIMBAL_MODE_KEYS`)
+> ⚠ 上面這段成立的前提是：**鎖定的 −30° 是相對水平面** (增穩)。
+> 如果是相對機身，DIVE 時相機會指向水平面下約 58°，目標會在畫面中心上方約 28°，
+> 超過垂直半視角 (約 27°)，目標出畫面。**地面測試階段 E 一定要確認**
+> (`xwing_virtual_GIMBAL_GROUND_TEST.md` 第 6 節)。
+
+### 4.3 對應表 (`xwing_virtual_config.py` 的 `GIMBAL_MODE_KEYS`)
 
 | 我們的狀態 | 送出的鍵 | 對方模式 | 備註 |
 |---|---|---|---|
-| STANDBY (未撥 GUIDED) | 不送 | (對方自行決定) | 原版是 FOLLOW 看前方 |
-| SEARCH | `'1'` | 追蹤 | |
-| PRE_DIVE | `'1'` | 追蹤 | 與 SEARCH 相同鍵，不會重送 |
-| DIVE | **不送** | — | ★ 待對方新增 FPV 鍵後填入 |
-| PULLOUT / DONE / ABORT | 不送 | — | |
+| STANDBY (未撥 GUIDED / 未 ARM) | 不送 | (對方自行決定) | 不干涉 |
+| SEARCH | `'1'` | 追蹤 | 目標留在畫面中心 |
+| **PRE_DIVE** | **`'2'`** | **鎖定 −30°** | ★ 一進推頭就送 |
+| DIVE | `'2'` | 鎖定 | 與 PRE_DIVE 同鍵，不會重送；若 PRE_DIVE 被跳過 (例如掛機 `--bench-dive`)，進 DIVE 也會送 |
+| PULLOUT / DONE / ABORT | 不送 | — | 維持鎖定 |
 
-- 狀態一改變就送一次。對方遙測回報的 `mode` 欄位一致才算確認，沒確認就每 1 s 重送，最多 3 次，之後印出警告。
-- 每次切換都寫進 `events.txt`。主 CSV 有 `gimbal_state`、`gimbal_mode_req`、`gimbal_mode_ok`、`vis_gimbal_mode` 可以對照。
+- 做法：**直接送模式鍵** (ASCII 1 byte，對方原協定，對方不用改程式)。
+- **預設開啟** (`VISION_UART_ENABLED = True`、`GIMBAL_MODE_CMD_ENABLED = True`)。
+  沒接雲台時用 `--no-vision`；只想收資料不送鍵用 `--no-gimbal-cmd`。
+- 狀態一改變就送一次。對方遙測回報的 `mode` 跟送的鍵一樣才算確認；沒確認就每 1 s 重送，最多 3 次，之後印出警告。
+- **鎖定到位**的判定：對方回報 `mode = 2` 且 \|pitch − (−30)\| ≤ 2°
+  (`GIMBAL_LOCK_KEY`、`GIMBAL_LOCK_PITCH_DEG`、`GIMBAL_LOCK_TOL_DEG`)。
+- 每次要求都會在 `events.txt` 記三件事：送出、對方確認 (要求後幾秒)、鎖定到位 (要求後幾秒、pitch)：
+  ```
+  20.05s  雲台狀態 → PRE_DIVE: 模式鍵 '2'
+  20.07s  雲台回報模式 '2' 已確認 (要求後 0.01s)
+  20.24s  ★ 雲台鎖定到位 pitch=-28.7° (要求後 0.17s, 任務狀態 PRE_DIVE)
+  ```
+  主 CSV 有 `gimbal_state`、`gimbal_mode_req`、`gimbal_mode_ok`、`gimbal_locked`、`vis_gimbal_mode`、`vis_gimbal_pitch` 可以對照。
 
-#### 做法 B：建議的任務狀態封包 (待雙方確認)
+### 4.4 時間要求
 
-沿用對方的封包框架 (magic `A5 5A`、version 7、LENGTH / LENGTH_XOR、CRC-16/CCITT-FALSE)，新增 **flags = 3**：
+模擬中 PRE_DIVE (推頭) 約 **1.4 s** 就交棒 DIVE。雲台從追蹤轉到 −30° 要在這之前完成，
+所以地面測試的到位標準是 **≤ 1.5 s**。SEARCH 時雲台在追蹤目標，接近推頭點時 pitch 本來就接近 −30°，
+實際要轉的角度通常很小。
+
+### 4.5 長期做法 (選做)：有 CRC 的任務狀態封包
+
+單一 byte 模式鍵沒有檢查碼，線路雜訊理論上可能誤切模式。如果之後要更穩，可以改送任務狀態封包，
+由對方決定雲台模式：
+
+| | 做法 A：直接送模式鍵 (**目前採用**) | 做法 B：送任務狀態封包 |
+|---|---|---|
+| 送什麼 | ASCII `'0'`/`'1'`/`'2'` (1 byte) | 有 CRC 的封包：任務狀態 + 建議模式 |
+| 對方要改 | 不用改 | 新增一種封包類型 |
+| 優點 | 現在就能用 | 有 CRC；對方可以記錄我們的任務狀態 |
+| 缺點 | 沒有檢查碼 | 要等對方實作 |
+
+做法 B 建議格式 (待雙方確認)：沿用對方的封包框架 (magic `A5 5A`、version 7、LENGTH / LENGTH_XOR、
+CRC-16/CCITT-FALSE)，新增 **flags = 3**：
 
 | 位元組 | 欄位 | 型別 | 值 |
 |---|---|---|---|
 | 0 | mission_state | uint8 | 0 STANDBY、1 SEARCH、2 PRE_DIVE、3 DIVE、4 PULLOUT、5 DONE、6 ABORT |
-| 1 | gimbal_request | uint8 | 0 手動、1 追蹤、2 鎖定、3 FPV、255 不要求 |
+| 1 | gimbal_request | uint8 | 0 手動、1 追蹤、2 鎖定、255 不要求 |
 | 2–3 | seq | uint16 | 每送一筆 +1 |
 | 4–7 | t_ms | uint32 | 本機 monotonic 毫秒 (記錄對齊用) |
 
 - payload 8 bytes，整包 18 bytes。狀態改變時立刻送，平常每 0.5 s 重送一次 (keepalive)。
-- 對方超過 1 s 沒收到時：維持目前模式 (或回到安全模式，由對方決定)。
 - ⚠ 必須等對方接收端改成「先找 `A5 5A` 封包框架」再送。舊版若逐 byte 找 `'0'`/`'1'`/`'2'`，可能把封包內容誤判成模式鍵。
-
-### 4.4 DIVE 切 FPV 的時機
-
-雲台從「追蹤」轉到「機身固定」需要時間 (轉動 + 穩定)。建議：
-
-- 在 **進 DIVE 那一刻** 送 FPV。此時飛機已經壓到約 −27°，目標在機身座標下接近畫面中央，切過去不會丟目標。
-- 對方回報切換完成要多久，我們就把 `GIMBAL_FPV_SETTLE_S` 設成那個時間。這段期間 `dive_guidance` 會先維持 −30°，不讓 PID 吃還在轉動的畫面。
-  (目前純虛擬版設成 0；原版 SIYI 是 0.3 s。)
 
 ---
 
 ## 5. 要跟對方確認的問題
 
-| # | 問題 | 為什麼要知道 |
+| # | 問題 | 狀態 |
 |---|---|---|
-| 1 | 「1 追蹤」「2 鎖定」的確切行為是什麼？「鎖定」是鎖定目標、鎖定地面方向，還是固定在機身上？ | 決定 SEARCH / DIVE 該送哪個鍵 |
-| 2 | 可以新增 **FPV (機身固定，相機光軸對齊機頭)** 模式嗎？鍵要用什麼？ | DIVE 必要 |
-| 3 | FPV 切換完成要多久？ | 設定 `GIMBAL_FPV_SETTLE_S` |
-| 4 | 遙測能加入**雲台 yaw** (相對機頭) 嗎？ | 追蹤模式下換算機身座標 |
-| 5 | pitch / roll 是相對**水平面**還是相對**機身**？ | 換算視線角 (SIYI A8 mini 的 pitch 相對水平面) |
-| 6 | `offset_x/y` 是否就是 `target − (cx, cy)`？正負號是右 / 下為正？ | 與我們 PID 的符號一致 (我們是右 / 下為正) |
-| 7 | 遙測頻率多少 Hz？沒有目標時還會持續送嗎？ | 判斷資料鏈中斷 |
-| 8 | 雲台安裝方向：yaw=0、pitch=0 時，光軸是否對齊機頭、平行機身縱軸？ | FPV 時的安裝角補償 |
-| 9 | 是否願意採用 4.3 的任務狀態封包 (做法 B)？ | 長期介面 |
-| 10 | 對方 Orin NX 與相機的電源、開機時間、斷電後是否自動重啟發送 | 實飛流程 |
+| 1 | 「1 追蹤」「2 鎖定」的確切行為？ | ✓ 已確認：追蹤 = 目標固定在畫面中心；鎖定 = pitch 固定向下 30° |
+| 2 | 雲台有哪些軸？ | ✓ 已確認：只有 pitch |
+| 3 | pitch 正負號？ | ✓ 已確認：往下為負 (地面測試階段 C 再驗一次) |
+| 4 | **鎖定的 −30° 相對水平面還是相對機身？回報的 pitch 呢？** | ★ 待確認 (地面測試階段 E)。相對機身的話 DIVE 時目標會出畫面 |
+| 5 | 從追蹤切到鎖定要多久？ | 待量測 (地面測試階段 C / D，標準 ≤ 1.5 s) |
+| 6 | `offset_x/y` 是否就是 `target − (cx, cy)`？右 / 下為正？ | 待確認 (與我們 PID 符號一致才能接控制) |
+| 7 | 遙測頻率多少 Hz？沒有目標時還會持續送嗎？ | 待確認 (判斷資料鏈中斷) |
+| 8 | 雲台安裝方向：pitch=0 時光軸是否平行機身縱軸？ | 待確認 (接進控制時的安裝角補償) |
+| 9 | 對方 Orin NX 斷電重開後，雲台的預設模式？會自動開始送資料嗎？ | 待確認 (地面測試階段 G)。我們只在狀態改變時送鍵，中途重開不會自動補送 |
+| 10 | 是否願意採用 4.5 的任務狀態封包 (做法 B)？ | 長期再談 |
 
 ---
 
@@ -184,17 +208,19 @@ python3 uart_mipi_receiver.py --port /dev/ttyUSB0
 |---|---|---|
 | `uart_mipi_receiver.py` | **新增 (對方提供，未修改)** | 協定定義 + 對方的獨立接收測試程式。本專案直接 import 它的解碼與校時，對方改協定時換掉這支即可 |
 | `xwing_uart_vision.py` | **新增** | 背景執行緒收 UART：重新同步、CRC、解碼、v7 校時與延遲、送模式鍵並確認、USB 拔插自動重開 |
-| `xwing_uart_sender_sim.py` | **新增** | 模擬對方 Orin NX 發送端 (v7 遙測 + 校時回覆 + 模式鍵)。對方硬體到之前就能測 |
-| `xwing_virtual_config.py` | 修改 | 新增 `VISION_UART_*`、`GIMBAL_MODE_*` 參數 (預設全部關閉) |
-| `xwing_virtual_flight.py` | 修改 | 新增 `--vision-uart`、`--vision-port`、`--gimbal-cmd`；依任務狀態送模式鍵；視覺資料寫入主 CSV；資料鏈中斷告警 |
+| `xwing_uart_sender_sim.py` | **新增** | 模擬對方 Orin NX + 雲台 (v7 遙測 + 校時回覆 + 模式鍵；只有 pitch 軸：追蹤時目標置中、鎖定時以 `--slew-dps` 轉到 −30°)。對方硬體到之前就能測 |
+| `xwing_gimbal_mode_test.py` | **新增** | ★ 地面測試工具 (不需 ROS / 飛控)：模擬任務狀態切換，量「送出 → 對方確認 → 鎖定到位」的時間，寫 CSV、印通過 / 不通過 |
+| `xwing_virtual_GIMBAL_GROUND_TEST.md` | **新增** | 地面測試詳細步驟 |
+| `xwing_virtual_config.py` | 修改 | `VISION_UART_*`、`GIMBAL_MODE_*`、`GIMBAL_LOCK_*` 參數；**預設開啟**；PRE_DIVE / DIVE 對應 `'2'` 鎖定 |
+| `xwing_virtual_flight.py` | 修改 | `--vision-port`、`--no-vision`、`--no-gimbal-cmd` (以及強制開啟用的 `--vision-uart`、`--gimbal-cmd`)；依任務狀態送模式鍵；確認 / 鎖定到位寫 events；視覺資料寫入主 CSV；資料鏈中斷告警 |
 
-**飛機控制完全沒變**：視覺資料只寫進 log。沒開 `--vision-uart` 時，行為與之前相同。
+**飛機控制完全沒變**：視覺資料只寫進 log，送給對方的只有模式鍵。加 `--no-vision` 時，行為與之前的純虛擬版相同。
 
 ### 6.1 設計原則
 
 - **UART 在獨立執行緒**：讀串口、等資料都不會卡住 50 Hz 控制迴圈。實測加上視覺後，每拍控制耗時中位數仍約 0.1 ms。
 - **視覺斷線不影響飛行**：串口錯誤會自動關閉、每秒重試，主程式只會在 events.txt 記一筆「資料鏈中斷」。
-- **沒裝 pyserial 也能飛**：開了 `--vision-uart` 但缺套件時，只印警告，然後繼續用虛擬目標飛。
+- **沒裝 pyserial 也能飛**：缺套件時只印警告，然後繼續用虛擬目標飛 (不會送鍵)。
 
 ---
 
@@ -218,31 +244,45 @@ python3 xwing_uart_sender_sim.py --port /dev/ttyUSB1      # 模擬對方
 python3 uart_mipi_receiver.py --port /dev/ttyUSB0         # 本機接收
 ```
 
-### 7.3 實飛 / 掛機
+### 7.3 雲台模式鍵地面測試 (不需 ROS)
+
+```bash
+python3 xwing_gimbal_mode_test.py --port <串口>                    # 互動: b/s/p/d/o 切任務狀態, 0/1/2 直接送鍵
+python3 xwing_gimbal_mode_test.py --port <串口> --auto --repeat 5  # 自動 5 輪, 統計鎖定時間
+```
+
+詳細步驟與通過標準見 `xwing_virtual_GIMBAL_GROUND_TEST.md`。
+
+### 7.4 實飛 / 掛機
 
 ```bash
 roslaunch mavros apm.launch
 
-# 只接收 + 記錄 (不送模式鍵)
-python3 xwing_virtual_flight.py --moving --vision-uart
+# 預設: 收雲台資料 + 依任務狀態送模式鍵 (SEARCH '1', PRE_DIVE '2')
+python3 xwing_virtual_flight.py --moving --vision-port /dev/serial/by-id/usb-XXXX
 
-# 指定串口 + 依任務狀態送模式鍵
-python3 xwing_virtual_flight.py --moving --vision-uart \
-        --vision-port /dev/serial/by-id/usb-XXXX --gimbal-cmd
+# 只收資料, 不送模式鍵
+python3 xwing_virtual_flight.py --moving --no-gimbal-cmd
+
+# 沒接雲台 (純虛擬, 不開 UART)
+python3 xwing_virtual_flight.py --moving --no-vision
 ```
 
 開機會印出：
 
 ```
-[xwing] 雲台視覺 UART: /dev/ttyUSB0 @ 115200 (只記錄); 模式鍵 ON
+[xwing] 雲台視覺 UART: /dev/ttyUSB0 @ 115200 (資料只記錄); 模式鍵 ON
 [UARTVision] 已開啟 /dev/ttyUSB0 @ 115200 8N1
 ```
 
 每秒狀態列的最後一段：
 
 ```
-... | VIS link=1 det=1 gmode=1(req 1)
-       │      │      └ 對方回報模式 (括號內: 我們要求的鍵)
+... | VIS link=1 det=1 gmode=2(req 2) gpitch=-30.0 LOCKED
+       │      │      │      │            │        └ 鎖定且 pitch 到位 (−30° ± 2°)
+       │      │      │      │            └ 對方回報的雲台 pitch
+       │      │      │      └ 我們要求的鍵
+       │      │      └ 對方回報模式
        │      └ 1 = 這筆有目標
        └ 1 = 近 2 s 內有收到有效封包
 ```
@@ -268,16 +308,17 @@ python3 xwing_virtual_flight.py --moving --vision-uart \
 | `vis_u_ctrl`、`vis_v_ctrl` | 換算到虛擬相機像素，**可直接跟 `virt_bbox_u/v` 比**，看真實影像與虛擬目標差多少 |
 | `gimbal_state` | 給雲台的任務狀態 (STANDBY / SEARCH / PRE_DIVE / DIVE …) |
 | `gimbal_mode_req`、`gimbal_mode_ok` | 我們要求的模式鍵；對方是否已回報同一模式 |
+| `gimbal_locked` | 1 = 對方回報鎖定 (mode=2) 且 pitch 在 −30° ± 2° 內 |
 | `vis_frames`、`vis_crc_err` | 累計有效封包數、CRC 錯誤數 |
 
 ---
 
 ## 9. 下一階段：把視覺接進控制 (尚未實作)
 
-1. 對方提供 FPV 模式，並確認第 5 節的問題。
+1. 地面測試確認鎖定的 −30° 相對水平面 (第 5 節 #4)，並確認第 5 節其他問題。
 2. 實飛幾趟「只記錄」，比對 DIVE 段的 `vis_u_ctrl/v_ctrl` 與 `virt_bbox_u/v`，確認符號、延遲 (`vis_cap_age_ms`) 和雜訊。
 3. 先做**影子 PID**：用真實影像算一套 PID 命令，只記錄不送 (原版 `realvision_pid_logger.py` 的做法)，與虛擬 PID 比較。
 4. 驗證後才切換 DIVE 的 PID 輸入來源：
    - `vis_u_ctrl/v_ctrl` 取代虛擬投影；
-   - 設定 `GIMBAL_FPV_SETTLE_S`；
+   - 把雲台 pitch 換算回機身座標 (相機相對機頭的角度 = 雲台 pitch − 機身 pitch，若雲台相對水平面)；
    - 定義丟失目標的處理：例如超過 `ABORT_TARGET_LOST_S` 就中止拉起，或暫時退回虛擬目標。

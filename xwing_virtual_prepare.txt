@@ -1,4 +1,4 @@
-xwing_virtual (純虛擬軌跡, 無相機/雲台) 啟動步驟
+xwing_virtual (控制用純虛擬軌跡; 對方雲台走 UART) 啟動步驟
 
 1.打開terminal
 輸入   roslaunch mavros apm.launch
@@ -8,6 +8,14 @@ xwing_virtual (純虛擬軌跡, 無相機/雲台) 啟動步驟
 輸入
 python3 xwing_virtual_flight.py --moving   #移動版 (預設)
 python3 xwing_virtual_flight.py --static   #靜止版
+
+雲台 (對方 Orin NX, USB-UART) 預設開啟: SEARCH 送 '1' 追蹤, 進 PRE_DIVE 送 '2' 鎖定 -30 度
+  指定串口:        --vision-port /dev/serial/by-id/usb-XXXX
+  沒接雲台:        --no-vision
+  只收資料不送鍵:  --no-gimbal-cmd
+  開機要看到: [xwing] 雲台視覺 UART: ... 模式鍵 ON
+  每秒狀態列尾巴: | VIS link=1 ... (link=1 才是有收到資料)
+  地面測試: xwing_virtual_GIMBAL_GROUND_TEST.md
 
 (不需要接相機 / SIYI 雲台; 不會錄影)
 

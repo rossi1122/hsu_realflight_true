@@ -76,6 +76,7 @@ VISION_CSV_FIELDS = [
     'vis_err_u_deg', 'vis_err_v_deg',    # 影像角度誤差 (右 / 下為正)
     'vis_u_ctrl', 'vis_v_ctrl',          # 換算到虛擬 (控制) 相機像素, 可直接跟 virt_bbox_u/v 比
     'gimbal_state', 'gimbal_mode_req', 'gimbal_mode_ok',
+    'gimbal_locked',     # 1 = 對方回報鎖定模式, 且 pitch 已到 −30° ± 容差 (機械到位)
     'vis_frames', 'vis_crc_err',
 ]
 
@@ -84,7 +85,7 @@ class UartVisionLink:
     """背景執行緒收 UART 視覺資料 + 送模式鍵. 所有方法都可從控制執行緒安全呼叫."""
 
     def __init__(self, port, baud=115200, mode_resend_s=1.0, mode_max_tries=3,
-                 log=print):
+                 log=print, lock_key='2', lock_pitch_deg=-30.0, lock_tol_deg=2.0):
         if not UART_OK:
             raise ImportError(f"UART 視覺需要 pyserial 與 uart_mipi_receiver.py "
                               f"({UART_IMPORT_ERROR}); 請 pip3 install pyserial")
@@ -103,6 +104,12 @@ class UartVisionLink:
         self._clock_enabled = False
 
         self._latest = None            # 最新一筆解碼結果 (dict)
+        self.lock_key = lock_key
+        self.lock_pitch_deg = float(lock_pitch_deg)
+        self.lock_tol_deg = float(lock_tol_deg)
+        # 最近一次模式要求的時間軸 (monotonic 秒): 要求 → 對方回報同模式 → 鎖定到位
+        self._timing = {'key': None, 't_req': None, 't_confirm': None,
+                        't_settled': None, 'pitch_settled': None}
         self._mode_req = None          # 要求的模式鍵 (str) 或 None
         self._mode_tries = 0
         self._mode_sent_t = 0.0
@@ -146,6 +153,21 @@ class UartVisionLink:
             self._mode_tries = 0
             self._mode_sent_t = 0.0
             self._mode_warned = False
+            self._timing = {'key': key, 't_req': time.monotonic(), 't_confirm': None,
+                            't_settled': None, 'pitch_settled': None}
+
+    def is_locked(self, pkt):
+        """這筆遙測是否「鎖定且 pitch 到位」."""
+        if pkt is None or not self.lock_key.isdigit():
+            return False
+        return (pkt.get('mode') == int(self.lock_key) and _finite(pkt.get('pitch'))
+                and abs(pkt['pitch'] - self.lock_pitch_deg) <= self.lock_tol_deg)
+
+    def mode_timing(self):
+        """最近一次模式要求的時間軸 (dict 副本):
+        key, t_req, t_confirm (對方回報同模式), t_settled (鎖定 pitch 到位), pitch_settled."""
+        with self._lock:
+            return dict(self._timing)
 
     def mode_status(self):
         """(要求的鍵, 是否已由對方回報確認)."""
@@ -281,6 +303,16 @@ class UartVisionLink:
             and d['fx'] > 0 and d['fy'] > 0
         with self._lock:
             self._latest = d
+            tm = self._timing
+            k = tm['key']
+            if k is not None and k.isdigit() and d['mode'] == int(k):
+                now = rx_ns / 1e9
+                if tm['t_confirm'] is None:
+                    tm['t_confirm'] = now
+                if (k == self.lock_key and tm['t_settled'] is None
+                        and self.is_locked(d)):
+                    tm['t_settled'] = now
+                    tm['pitch_settled'] = d['pitch']
 
     def _latency(self, frame, rx_ns):
         """v7: (取像→收到 ms, 校時不確定 ms, 取像時刻(本機 monotonic 秒)).
@@ -336,6 +368,7 @@ def vision_row(link, pkt, last_result_id, now_mono, ctrl_fx, ctrl_fy,
     if link is None:
         return row, last_result_id
     req, ok = link.mode_status()
+    row['gimbal_locked'] = int(link.is_locked(pkt))
     row.update(gimbal_state=gimbal_state,
                gimbal_mode_req=req if req is not None else '',
                gimbal_mode_ok=int(ok),

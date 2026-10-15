@@ -1,7 +1,9 @@
 # 實驗執行小抄 — xwing_virtual (純虛擬軌跡)
 
 > 對照原版：`RUN_CASES.md`。差別如下：
-> - 沒有相機、YOLO、雲台、錄影 → 不需要 `--no-annot` / `--no-video`，也不用檢查雲台、錄影訊息
+> - 沒有相機、YOLO、SIYI 雲台、錄影 → 不需要 `--no-annot` / `--no-video`，也不用檢查錄影訊息
+> - 對方雲台走 USB-UART，**預設開啟**：SEARCH 送 `'1'` 追蹤，進 PRE_DIVE 送 `'2'` 鎖定 −30°。
+>   串口用 `--vision-port` 指定；沒接雲台加 `--no-vision` (見下方「雲台」一節)
 > - 主程式改成 `xwing_virtual_flight.py`
 > - 新場地、240 m / 30 m/s / 30° 俯衝到 120 m
 
@@ -59,7 +61,14 @@ Mission Planner → 載入 `xwing_virtual_mission.waypoints` (240 m 跑道)，
 
 方向舵微調 (trim) 歸中 (同原版)。
 
-### 5. 實飛不要帶 `--ground-test` / `--bench` / `--bench-dive`
+### 5. 雲台 (對方 Orin NX)
+
+- 起飛前先做完 `xwing_virtual_GIMBAL_GROUND_TEST.md` 的階段 C、E (至少看過一次雲台鎖到 −30°，且確認是相對水平面)
+- 程式啟動要看到 `[xwing] 雲台視覺 UART: ... 模式鍵 ON`，狀態列尾巴 `VIS link=1`
+- 下面 4 個 case 都加 `--vision-port /dev/serial/by-id/usb-XXXX` (或把 `VISION_UART_PORT` 改好)
+- 當天沒接雲台：加 `--no-vision`
+
+### 6. 實飛不要帶 `--ground-test` / `--bench` / `--bench-dive`
 
 ---
 

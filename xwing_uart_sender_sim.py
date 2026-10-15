@@ -8,7 +8,12 @@ xwing_uart_sender_sim.py — 模擬對方實驗室 Orin NX 的 UART 發送端 (v
   · 以 --hz 送 v7 遙測封包 (格式與 uart_mipi_receiver.py 完全相同, CRC-16/CCITT-FALSE)
   · 回覆 v7 校時請求 (flags=1 → flags=2), 自己的時鐘故意加一個偏移, 驗證校時有效
   · 收到 ASCII '0'/'1'/'2' → 切換回報的 mode 欄位 (模擬雲台切模式)
-  · 目標在畫面上做圓周運動; --no-target 時欄位填 NaN (無目標)
+  · 模擬對方雲台 (2026/10 確認的行為):
+      只有 pitch 軸, 往下為負;
+      '0' 手動: pitch 停在原角度;
+      '1' 追蹤: pitch 自動把目標維持在畫面中心 (偏移量接近 0);
+      '2' 鎖定: pitch 以 --slew-dps 轉到 −30° 後固定, 目標在畫面上自由移動
+  · --no-target 時目標欄位填 NaN (無目標)
 
 用法:
   # A. 不需要任何硬體 (虛擬串口 pty):
@@ -52,6 +57,8 @@ class Sim:
         self.args = args
         self.mode = args.mode
         self.result_id = 0
+        self.pitch = args.start_pitch          # 雲台 pitch (度, 往下為負)
+        self.t_last = time.monotonic()
         self.rx = bytearray()
         self.t0 = time.monotonic()
         self.sent = 0
@@ -65,14 +72,29 @@ class Sim:
         cx, cy = 959.5, 545.0
         cap = remote_now() - int(a.latency_ms * 1e6)   # 影像是 latency_ms 前拍的
         self.result_id += 1
+        now = time.monotonic()
+        dt, self.t_last = now - self.t_last, now
+        # 目標實際所在的俯角 (度, 往下為負): 在 −20° 附近慢慢變
+        los_pitch = -20.0 + 6.0 * math.sin(0.15 * t)
+        if self.mode == 1:                     # 追蹤: pitch 追目標俯角
+            want = los_pitch
+        elif self.mode == 2:                   # 鎖定: 固定 −30°
+            want = a.lock_pitch
+        else:                                  # 手動: 不動
+            want = self.pitch
+        step = a.slew_dps * dt
+        self.pitch += max(-step, min(step, want - self.pitch))
+        pitch = self.pitch
+        roll = 0.5 * math.sin(0.3 * t)
         if a.no_target:
             tx = ty = ox = oy = float('nan')
         else:
-            tx = cx + 200.0 * math.cos(0.5 * t)
-            ty = cy + 120.0 * math.sin(0.5 * t)
-            ox, oy = tx - cx, ty - cy
-        pitch = -30.0 + 5.0 * math.sin(0.2 * t)
-        roll = 0.5 * math.sin(0.3 * t)
+            # 垂直偏移 = 目標俯角與光軸的差 (往下為正); 追蹤時接近 0
+            oy = fy * math.tan(math.radians(pitch - los_pitch))
+            ox = 60.0 * math.sin(0.4 * t) if self.mode != 1 else 3.0 * math.sin(2.0 * t)
+            if self.mode == 1:
+                oy = 3.0 * math.cos(2.0 * t) + oy
+            tx, ty = cx + ox, cy + oy
         payload = struct.pack(BASE_FMT, tx, ty, ox, oy, fx, fy, cx, cy, w, h,
                               pitch, roll, self.mode, self.result_id,
                               float(a.latency_ms), 5.0)
@@ -125,6 +147,12 @@ def main():
     ap.add_argument('--mode', type=int, choices=(0, 1, 2), default=0,
                     help='開機時回報的模式 (預設 0 手動)')
     ap.add_argument('--no-target', action='store_true', help='目標欄位一律 NaN')
+    ap.add_argument('--slew-dps', type=float, default=40.0,
+                    help='雲台 pitch 轉動速度 °/s (預設 40)')
+    ap.add_argument('--lock-pitch', type=float, default=-30.0,
+                    help='鎖定模式的 pitch (預設 −30, 往下為負)')
+    ap.add_argument('--start-pitch', type=float, default=-10.0,
+                    help='開機時雲台 pitch (預設 −10)')
     ap.add_argument('--duration', type=float, default=0.0, help='秒, 0 = 一直跑')
     args = ap.parse_args()
 
@@ -181,7 +209,8 @@ def main():
             if now - last_print >= 5.0:
                 last_print = now
                 print(f"[sim] 已送 {sim.sent} 筆, 校時回覆 {sim.clock_replies} 次, "
-                      f"目前模式 {sim.mode} ({MODE_NAMES[sim.mode]})", flush=True)
+                      f"目前模式 {sim.mode} ({MODE_NAMES[sim.mode]}), "
+                      f"雲台 pitch {sim.pitch:+.1f}°", flush=True)
             time.sleep(0.002)
     except KeyboardInterrupt:
         pass

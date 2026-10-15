@@ -9,7 +9,8 @@
 | 俯衝角 | 25° | **30°** |
 | 俯衝高度 | 120 → 70 m | **240 → 120 m** |
 | 速度上限 (超速提前拉平) | 30 m/s | **60 m/s** |
-| 感知 | 相機 + YOLO + 雲台 (只記錄) + 虛擬目標 (控制) | **只有虛擬目標** |
+| 感知 | 相機 + YOLO + 雲台 (只記錄) + 虛擬目標 (控制) | **控制只用虛擬目標**；對方雲台視覺經 UART 只記錄 |
+| 雲台 | 自己控 SIYI (FOLLOW / FPV) | **對方的雲台**：我們依任務狀態送模式鍵 (SEARCH `'1'` 追蹤，**PRE_DIVE `'2'` 鎖定向下 30°**) |
 | 目標起點 | (22.913647, 120.312259) | **23°43'19.6"N 120°22'47.6"E = (23.7221111, 120.3798889)** |
 | 目標航向點 | (22.9149299, 120.3121517)，方位 355.5° | **(23.720997, 120.379882)，方位 180.3° (往南)** |
 
@@ -42,9 +43,11 @@
 | `xwing_virtual_RUN_CASES.md` | `RUN_CASES.md` | 到場地執行小抄 (新指令) |
 | `xwing_virtual_prepare.txt` | `prepare.txt` | 開機啟動步驟 |
 | `xwing_virtual_RUDDER_BENCH.md` | (新) | X-wing 方向舵掛機測試流程 |
-| `xwing_virtual_GIMBAL_UART.md` | (新) | ★ 對方實驗室雲台視覺 UART 整合說明 (接線、協定、任務狀態回傳、待確認問題) |
-| `xwing_uart_vision.py` | (新) | 背景執行緒接收雲台視覺 UART (v6/v7)、送模式鍵；目前只記錄，不進控制 |
-| `xwing_uart_sender_sim.py` | (新) | 模擬對方 Orin NX 發送端，沒有硬體也能測 |
+| `xwing_virtual_GIMBAL_UART.md` | (新) | ★ 對方實驗室雲台視覺 UART 整合說明 (接線、協定、模式鍵對應、待確認問題) |
+| `xwing_virtual_GIMBAL_GROUND_TEST.md` | (新) | ★ 雲台鎖定模式地面測試步驟 (桌上自測 → 接線 → 看雲台轉到 −30° → 整機掛機) |
+| `xwing_uart_vision.py` | (新) | 背景執行緒接收雲台視覺 UART (v6/v7)、送模式鍵並確認、判斷鎖定到位；視覺資料只記錄，不進控制 |
+| `xwing_uart_sender_sim.py` | (新) | 模擬對方 Orin NX + 雲台 (只有 pitch 軸、追蹤 / 鎖定 −30°)，沒有硬體也能測 |
+| `xwing_gimbal_mode_test.py` | (新) | 雲台模式鍵地面測試工具 (不需 ROS)：量送出 → 確認 → 鎖定到位的時間 |
 | `uart_mipi_receiver.py` | 對方提供 (未修改) | UART 協定定義與獨立接收測試程式 |
 
 ### 1.2 沿用、**完全沒改**的原模組
@@ -130,13 +133,13 @@ roll 保護、虛擬相機內參 (1x)、`TARGET_SPEED_MPS=10`、`MOVING_TARGET_L
 | 項目 | 原版 | xwing_virtual |
 |---|---|---|
 | 執行緒 | 視覺 (~30 Hz) + 控制 (50 Hz) + 取像 + 錄影 ×2 | **只有控制 (50 Hz)** (加上 bridge 自己的發送執行緒) |
-| 硬體需求 | ROS + MAVROS + 相機 + SIYI 雲台 + GPU (YOLO) | **ROS + MAVROS + numpy** |
+| 硬體需求 | ROS + MAVROS + 相機 + SIYI 雲台 + GPU (YOLO) | **ROS + MAVROS + numpy**；接對方雲台時再加 USB-UART + pyserial (辨識在對方的 Orin NX 上跑) |
 | 啟動檢查 | 雲台連線失敗或取像失敗 → FATAL 結束 | 拿掉；**新增飛控空速參數檢查** (`AIRSPEED_MIN/MAX/CRUISE`，新舊參數名都查) |
 | 控制輸入 | `virt.get_fields()` → `sm.update()` | **相同** |
 | 真實 PID 記錄 | `GimbalCompPIDLogger` 每拍算兩套真實 PID | 拿掉 |
 | 掛機合成 bbox (`--inject-bbox`) | 有 | 拿掉 (虛擬目標本身就是合成的) |
 | 輸出 | 主 CSV + 視覺 CSV + 標註影片 + raw 影片 + events | **主 CSV + events** |
-| 主 CSV 欄位 | 160 欄 (含 real_*、gcomp_*、vis_*)，另有視覺 CSV 54 欄 | 80 欄。拿掉 `frame_idx`、`vis_*`、`img_to_cmd_ms`、`real_*`、`gcomp_*`；**新增 `tgt_lat`、`tgt_lon`** (虛擬目標當下 GPS，方便在地圖上畫) |
+| 主 CSV 欄位 | 160 欄 (含 real_*、gcomp_*、vis_*)，另有視覺 CSV 54 欄 | 80 欄 + 雲台 UART 34 欄 (`vis_*`、`gimbal_*`，沒接雲台時留空)。拿掉 `frame_idx`、`img_to_cmd_ms`、`real_*`、`gcomp_*`；**新增 `tgt_lat`、`tgt_lon`** (虛擬目標當下 GPS，方便在地圖上畫) |
 | 檔名 | `flight_YYYYmmdd_HHMMSS_<tag>.csv` | `xwing_virtual_YYYYmmdd_HHMMSS_<tag>.csv` |
 | 命令列 | `--static/--moving/--start/--speed/--target/--predive-dist/--bench/--bench-pitch/--bench-dive/--ground-test/--dive-hold-heading/--case/--tgt-heading/--no-video/--no-annot/--inject-*` | 同左，但拿掉 `--no-video`、`--no-annot`、`--inject-*`、`--predive` |
 | `BENCH_GEOMETRY_AGL_M` | 寫死 120 | `= CRUISE_AGL_M` (240) |

@@ -36,7 +36,7 @@
       AIRSPEED_MAX    >= 60       (目前 X-wing 是 50, 要改)
       AIRSPEED_MIN    <= 30
       AIRSPEED_CRUISE  = 30
-      遙控器撥得到 GUIDED (目前 FLTMODE1~6 沒有 15, 要加; 或 RCx_OPTION=55)
+      GUIDED 由地面站 (Mission Planner) 切換; 模式開關不用改
       (X-wing 韌體沒有 GUIDED_TIMEOUT 參數, 不用設)
       圍欄 (FENCE_TYPE=4 多邊形) 要包住整條航線, 否則俯衝中碰圍欄會 RTL
 
@@ -111,7 +111,8 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
 ------------------------------------------------------------------
 1) 起飛 (X-wing 不是 VTOL, 照平常方式) → AUTO 爬到 240 m 進跑道
    畫面每秒印 [SEARCH  ] ... g=0  (還沒撥 GUIDED)
-2) 飛機轉完彎、航向已對正目標起點 (往南) 之後, 到 GUIDED 切換點撥 GUIDED
+2) 飛機轉完彎、航向已對正目標起點 (往南) 之後, 到 GUIDED 切換點由地面站切 GUIDED
+   (Mission Planner → Actions → GUIDED → Set Mode; 數傳延遲約 0.5–1 s, 可稍提早)
    (撥 GUIDED 時離目標起點至少約 575 m (移動) / 655 m (靜止), SEARCH 才有 8–10 s)
 3) 之後全自動, 畫面應該依序出現:
 
@@ -131,7 +132,9 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
 4) 看到 MODE: PULLOUT → DONE 之後 → 撥回 AUTO (爬回 240 m 回跑道) 或照 SOP 處理
 
 中途出狀況:
-  ★ 最快: 遙控器直接撥離 GUIDED (FBWA / AUTO), 飛控立刻接手
+  ★ 最快: 飛手把模式開關撥到 FBWA (要跟目前位置不同才會切), 飛控立刻接手
+  地面站: Mission Planner 切 AUTO / FBWA
+  GUIDED 中飛手不要碰搖桿 (STICK_MIXING=1)
   鍵盤: Terminal 2 輸入  x  按 Enter → 程式中止並拉起 (ABORT)
   雲台資料鏈中斷 / 模式鍵沒確認 → 只會記在 events, 飛機控制不受影響, 不用中止
 

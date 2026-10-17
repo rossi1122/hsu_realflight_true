@@ -34,8 +34,7 @@ Mission Planner → Config → Full Parameter List, 看 SERVO1~7_FUNCTION
 
   PTCH_LIM_MIN_DEG = -40
   AIRSPEED_MAX     = 60
-  模式開關加 GUIDED: 撥得到的那一格 FLTMODEx = 15
-                     或 空通道 RCx_OPTION = 55
+  (GUIDED 由地面站 Mission Planner 切換, 模式開關不用改; FLTMODE_GCSBLOCK=0 已允許)
 
 順便記下:
   韌體版本 (Mission Planner → Messages 分頁): ____________
@@ -49,7 +48,8 @@ Mission Planner → Config → Full Parameter List, 看 SERVO1~7_FUNCTION
 [ ] 副翼打右   → 右副翼後緣上、左副翼後緣下
 [ ] 拉桿       → 兩片 V 尾後緣一起往上
 [ ] 方向舵打右 → 右片 V 尾後緣下、左片後緣上
-[ ] 模式開關撥得到 Guided (Mission Planner 畫面顯示)
+[ ] Mission Planner 切得到 Guided: Flight Data → Actions → 選 GUIDED → Set Mode
+[ ] 飛手把模式開關從目前位置撥到 FBWA / MANUAL → 立刻離開 GUIDED (中止用)
 
 
 ------------------------------------------------------------------
@@ -211,9 +211,10 @@ Terminal 2 (版本 B):
 第 5 項 Test B、E 都通過, 才可以拿掉 --dive-hold-heading (版本 A)
 
 飛行中:
-  - 飛過 GUIDED 點 → 撥 GUIDED → 全自動
-  - 看到 PULLOUT → DONE → 撥回 AUTO
-  - 出狀況: 飛手直接撥離 GUIDED (最快); 或 Terminal 2 輸入 x 按 Enter
+  - 飛過 GUIDED 點 → 地面站切 GUIDED → 全自動
+  - 看到 PULLOUT → DONE → 地面站切回 AUTO
+  - 出狀況: 飛手把模式開關撥到 FBWA (最快); 或地面站切 AUTO/FBWA; 或 Terminal 2 輸入 x 按 Enter
+  - 在 GUIDED 中飛手不要碰搖桿 (STICK_MIXING=1, 搖桿會疊加到命令上)
 
 落地後:
   - Terminal 2 輸入 q 按 Enter

@@ -55,7 +55,7 @@ Mission Planner → 載入 `xwing_virtual_mission.waypoints` (240 m 跑道)，
 | `AIRSPEED_MIN` | **≤ 30** |
 | `AIRSPEED_CRUISE` | **30** |
 | `GUIDED_TIMEOUT` | **0.5** (X-wing 韌體沒有這個參數 → 不用設) |
-| 模式開關 | **撥得到 GUIDED** (X-wing 目前 `FLTMODE1~6` 沒有 15；或設 `RCx_OPTION = 55`) |
+| GUIDED 切換 | **由地面站 Mission Planner 切** (`FLTMODE_GCSBLOCK = 0`，模式開關不用改) |
 | `FENCE_ALT_MAX` | **> 240** (只在有開高度圍欄時有用；X-wing `FENCE_TYPE = 4` 只檢查多邊形) |
 
 ### 4. 遙控器
@@ -99,7 +99,7 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
 
 1. 起飛 (照平常方式) → AUTO 爬到 240 m，進跑道。
 2. 程式開著，畫面會每秒印 `[SEARCH  ] ... g=0` (還沒撥 GUIDED)。
-3. 飛機轉完彎、在 **WP1 → WP2 進場邊對正往南** 之後，**飛過 WP2 (目標起點北方 700 m) 時撥 GUIDED**。
+3. 飛機轉完彎、在 **WP1 → WP2 進場邊對正往南** 之後，**飛過 WP2 (目標起點北方 700 m) 時由地面站切 GUIDED**。
 4. 之後全自動：
 
 | 段 | 觸發 | 預計 (移動 / 靜止) |

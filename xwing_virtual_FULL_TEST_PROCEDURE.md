@@ -30,9 +30,9 @@
 
 | 角色 | 工作 |
 |---|---|
-| **飛手** | 遙控器。起飛降落、**撥 GUIDED**、出狀況時撥離 GUIDED |
+| **飛手** | 遙控器。起飛降落；GUIDED 中不碰搖桿；出狀況時把模式開關撥到 FBWA 離開 GUIDED |
 | **機載操作員** | 連到我們的 Orin NX 終端機 (你平常的連線方式)，執行程式、看訊息、必要時輸入 `x` 中止 |
-| **地面站** | Mission Planner：看模式、高度、空速、圍欄 |
+| **地面站** | Mission Planner：**切 GUIDED / 切回 AUTO**，看模式、高度、空速、圍欄 |
 | **對方人員** | 對方 Orin NX + 雲台開機、確認他們的程式在跑 |
 | (選) **開車的人** | 真的有車當目標時：撥 GUIDED 那一刻從起點出發 |
 
@@ -40,7 +40,7 @@
 
 | 項目 | 不通過時 |
 |---|---|
-| 飛控參數 (`PTCH_LIM_MIN_DEG`、`AIRSPEED_MAX`、GUIDED 開關) | **不飛** |
+| 飛控參數 (`PTCH_LIM_MIN_DEG`、`AIRSPEED_MAX`)、地面站切得到 GUIDED | **不飛** |
 | 方向舵 Test A (yaw 欄位 = 方向舵、送 180 = 歸中) | **不飛** (PRE_DIVE 靠它把方向舵歸中，版本 A、B 都會用到) |
 | 整機掛機 F1：PRE_DIVE 時兩片 V 尾有差動 | **不飛** |
 | 方向舵 Test B 正負號不對、或 Test E 剩 < 50% | 可以飛，但只能用**版本 B** (`--dive-hold-heading`) |
@@ -73,15 +73,11 @@ python3 xwing_virtual_sim.py                 # 不需要 ROS, 看各段距離
 |---|---|---|---|
 | `PTCH_LIM_MIN_DEG` | −35 | **−40** | 俯衝 −30° 需要餘裕，−35 會被飛控夾住 |
 | `AIRSPEED_MAX` | 50 | **60** | 程式速度上限 60 m/s。⚠ 先確認機體能承受 60 m/s |
-| GUIDED 開關 | 沒有 | 二選一 (見下) | ★ 目前遙控器**撥不到 GUIDED**，任務無法開始 |
 | MAVROS 那個序列埠的鮑率 | SERIAL1 = 115、SERIAL2 = 57 | 若 MAVROS 走 SERIAL2 → 改 **921** | 57600 傳不完 50 Hz 的姿態資料 |
 
-**GUIDED 開關**：目前 `FLTMODE_CH = 8`，六格是 MANUAL / RTL / FBWA / AUTO / MANUAL / FBWA，沒有 GUIDED (15)。跟飛手確認後二選一：
-
-- 把模式開關**撥得到的一格**改成 `15`。`FLTMODE5` 目前跟 `FLTMODE1` 重複，可以考慮，但要先確認開關的哪個位置會對到第 5 格；
-- 或找一個空的通道 (開關)，設 `RCx_OPTION = 55` (GUIDED)。
-
-改完要在第 2 步實際撥一次，確認 Mission Planner 顯示 `Guided`。
+**GUIDED 由地面站切換**：Mission Planner → Flight Data → Actions → 模式選 GUIDED → **Set Mode**。
+`FLTMODE_GCSBLOCK = 0` 已允許地面站切模式，模式開關不用改。
+⚠ 中止時飛手要把模式開關**撥到跟目前不同的位置** (例如 FBWA) 才會離開 GUIDED——ArduPlane 只在開關位置「改變」時才切模式。
 
 **不要改的**：`AIRSPEED_MIN = 25`、`AIRSPEED_CRUISE = 30`、`GUIDED_P = 5000`、`TRIM_THROTTLE = 45` (程式的 `THR_TRIM = 0.45` 跟它一致)。
 
@@ -211,7 +207,8 @@ rostopic echo -n1 /mavros/state        # 要看到 connected: True
 
 依序撥每個位置，看 Mission Planner HUD 的模式：
 
-- [ ] 撥得到 **Guided** (0-2 節改好的)
+- [ ] **Mission Planner 切得到 Guided** (Actions → GUIDED → Set Mode)
+- [ ] 在 Guided 時，飛手把開關撥到 FBWA → 立刻離開 Guided (中止動作)
 - [ ] 撥得到 AUTO、FBWA、MANUAL
 - [ ] 最後撥回 **MANUAL**
 
@@ -377,7 +374,9 @@ python3 xwing_virtual_flight.py --moving --case flight1                       # 
 ### 3-7. 撥 GUIDED (任務開始)
 
 1. 飛機轉完彎、在 WP1 → WP2 對正往南後，**飛過 WP2 (或你規劃的 GUIDED 點) 時**，地面站 / 操作員喊「GUIDED」
-2. 飛手撥 **GUIDED**；(有車的話) 車子同時出發
+2. **地面站** 在 Mission Planner 按 Set Mode **GUIDED** (事先選好 GUIDED，到點只按一下)；(有車的話) 車子同時出發
+   - 經數傳切換約有 0.5–1 s 延遲 (約 15–30 m)，可以稍微提早按
+   - 確認 HUD 顯示 Guided、程式出現 `★ GUIDED 上升沿`
 3. 之後全自動。操作員照畫面念出狀態：
 
 | 時間 (撥 GUIDED 後) | 畫面 | 飛機 |
@@ -388,13 +387,14 @@ python3 xwing_virtual_flight.py --moving --case flight1                       # 
 | 約 21 s | `★★ MODE: DIVE → PULLOUT` | 約 120 m 拉平 |
 | 約 21.5 s | `★★ MODE: PULLOUT → DONE` | 平飛往南，最低約 100 m 後回到 120 m |
 
-4. 看到 `MODE: PULLOUT → DONE` 之後，飛手撥回 **AUTO**，飛機爬回 240 m、回跑道。
+4. 看到 `MODE: PULLOUT → DONE` 之後，地面站切回 **AUTO**，飛機爬回 240 m、回跑道。
 
 ### 3-8. 中止與緊急處理
 
 | 狀況 | 誰 | 怎麼做 |
 |---|---|---|
-| 姿態、高度、速度看起來不對 | **飛手** | **直接撥離 GUIDED** (FBWA / AUTO / MANUAL)，最快 |
+| 姿態、高度、速度看起來不對 | **飛手** | **模式開關撥到 FBWA** (要跟目前位置不同)，最快 |
+| 同上，飛手來不及 | 地面站 | Mission Planner 切 AUTO 或 FBWA |
 | 程式異常但飛機穩定 | 操作員 | Terminal 2 輸入 `x` 按 Enter → ABORT：拉起 2.5 s 後放手 → 飛手切 AUTO |
 | 高度低於 100 m (PRE_DIVE / DIVE 中) | 程式 | 自動 ABORT 拉起 |
 | 碰到圍欄 | 飛控 | 自動 RTL (回圍欄內前不能切模式) |
@@ -459,7 +459,6 @@ SEARCH 航向收斂、俯衝角、拉平高度、miss distance，以及雲台資
 |---|---|---|
 | 0-2 | `PTCH_LIM_MIN_DEG = -40` | □ |
 | 0-2 | `AIRSPEED_MAX = 60` | □ |
-| 0-2 | GUIDED 開關設定 | □ |
 | 0-2 | MAVROS 序列埠 / 鮑率確認 | □ |
 | 0-2 | 韌體版本記錄 | ________ |
 | 0-3 | `VISION_UART_PORT` 填好 | □ |
@@ -468,7 +467,7 @@ SEARCH 航向收斂、俯衝角、拉平高度、miss distance，以及雲台資
 | 1-3 | 5 輪全部通過 | □ |
 | 1-4 | 鎖定相對水平面 | □ 水平面　□ 機身 |
 | 2-3 | MANUAL 舵面方向正確 | □ |
-| 2-4 | 撥得到 GUIDED | □ |
+| 2-4 | 地面站切得到 GUIDED、開關撥 FBWA 能離開 | □ |
 | 2-5 | R = __ E = __ A = __ | |
 | 2-6 | Test A 成立 | □ (不成立不飛) |
 | 2-6 | Test B 正負號 | □ 對 (版本 A 可用)　□ 反 |

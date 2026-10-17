@@ -71,7 +71,7 @@
 | 飛控參數 | 說明 | 建議 |
 |---|---|---|
 | `GUIDED_TIMEOUT` | forced attitude 逾時 | **0.5** (X-wing 韌體沒有這個參數，用韌體內建值) |
-| `FLTMODE1~6` / `RCx_OPTION` | 遙控器要撥得到 GUIDED (15)，或用 `RCx_OPTION = 55` | X-wing 目前**沒有**，要加 |
+| `FLTMODE_GCSBLOCK` | 地面站可以切模式 | **0** (X-wing 已是 0；GUIDED 由地面站切) |
 | `GUIDED_P` | 存在才代表韌體有 43002 航向控制 | 必須存在 |
 
 ### 姿態控制器增益 (★ 先別動)

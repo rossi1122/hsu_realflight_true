@@ -1,0 +1,12 @@
+    0.00s  xwing_virtual: 巡航 240m/30m/s 俯衝 30° 拉平 120m Vmax 60m/s 推頭 416m
+    0.00s  目標=移動 起點 (23.7221111, 120.3798889) 方位 180.3° 速度 10.0 m/s  前置瞄準 OFF  (控制: 虛擬軌跡)
+    0.00s  雲台視覺 UART: /dev/ttyUSB0 @ 115200 只記錄; 模式鍵 ON {'STANDBY': None, 'SEARCH': '1', 'PRE_DIVE': '2', 'DIVE': '2', 'PULLOUT': None, 'DONE': None, 'ABORT': None}
+    0.10s  雲台狀態 → STANDBY: 模式鍵 不要求
+    1.02s  ★★ 雲台視覺資料鏈中斷: 尚未收到任何有效封包 (★ 串口 /dev/ttyUSB0 開不了 — 檢查 USB-UART 有沒有插 / 串口名稱, CRC 錯 0, 串口錯 0) ← 控制不受影響
+   17.42s  ★ GUIDED 上升沿 — 種點 + ARM (任務開始)
+   17.42s  種點(移動): 目標起點 NED=(0.0,0.0) 方位 180.3° 速度 10.0 m/s t0=17.4s
+   17.42s  TECS 目標預送 (背景) ALT=240m SPD=30m/s
+   17.42s  雲台狀態 → SEARCH: 模式鍵 '1'
+   17.43s  TECS 目標預送完成 ALT=240m SPD=30m/s ok=(True,True)
+   34.65s  雲台視覺 UART 統計: {'frames': 0, 'clock': 0, 'bytes': 0, 'header': 0, 'crc': 0, 'payload': 0, 'discarded': 0, 'reopen': 0, 'mode_tx': 0, 'serial_err': 0, 'open_fail': 36}
+   34.66s  程式結束 mode=SEARCH errors=0 時長 34.7s

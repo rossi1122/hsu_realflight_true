@@ -52,10 +52,10 @@ roslaunch mavros apm.launch
 ------------------------------------------------------------------
 cd ~/hsu_realflight_true          (換成你放專案的路徑)
 
-# Case 1: 移動目標 + 版本 A (DIVE 用 PID 打方向舵) ← 方向舵掛機測過才用
+# Case 1: 移動目標 + 版本 A (DIVE 用 PID 打方向舵) ← X-wing 10/17 掛機測過, 可用 (建議第二趟)
 python3 xwing_virtual_flight.py --moving
 
-# Case 2: 移動目標 + 版本 B (DIVE 不打方向舵, 只修 pitch) ← ★ 方向舵還沒測就用這個
+# Case 2: 移動目標 + 版本 B (DIVE 不打方向舵, 只修 pitch) ← ★ 第一趟用這個
 python3 xwing_virtual_flight.py --moving --dive-hold-heading
 
 # Case 3: 靜止目標 + 版本 A
@@ -77,6 +77,9 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
           --vision-port /dev/serial/by-id/usb-XXXX --case flight1
 
 ★ 實飛【不要】加: --bench  --bench-dive  --ground-test  --bench-pitch
+★ 開程式前飛控要在 AUTO / FBWA / MANUAL, 不能在 GUIDED
+  (程式啟動時若已在 GUIDED, 會立刻當成任務開始 — 10/17 地面測試確認)
+★ MAVROS 出現 Permission denied: sudo usermod -aG dialout $USER (重新登入)
 
 
 ------------------------------------------------------------------

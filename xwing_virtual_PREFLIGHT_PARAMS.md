@@ -67,6 +67,20 @@
 | (TECS 目標由程式送) | 拉平後保持 | `TECS_HOLD_ALT_M` / `TECS_SPEED_MPS` | 70 m / 18 m/s | **120 m / 30 m/s** |
 | `TECS_SPDWEIGHT`、`TECS_PITCH_MAX` 等 | 速度 / 高度權衡 | 沿用調好的值 | — | — |
 
+### ★ X-wing 實際設定 (2026/10/17 確認，參數檔 `test_records/20261017_xwing/params/x-wing_20261017_final.param`)
+
+| 飛控參數 | X-wing 值 | 結果 |
+|---|---|---|
+| `PTCH_LIM_MIN_DEG` | −45 (原 −35) | ✓ ≤ −40 |
+| `AIRSPEED_MAX` | 60 (原 50) | ✓ ≥ 60 |
+| `AIRSPEED_MIN` / `AIRSPEED_CRUISE` | 25 / 30 | ✓ |
+| `GUIDED_P` | 5000 | ✓ 43002 可用 |
+| `GUIDED_TIMEOUT` | (沒有這個參數) | 內建逾時實測約 3 s |
+| `FLTMODE_GCSBLOCK` | 0 | ✓ GUIDED 由地面站切 |
+| `MIXING_GAIN` | 1 | V 尾方向舵約 11 µs / 度 |
+| `TRIM_THROTTLE` | 45 | ✓ = 程式 `THR_TRIM 0.45` |
+| MAVROS | USB `/dev/ttyACM0` (SERIAL0) | ✓ 不受鮑率限制 |
+
 ### GUIDED / 航向
 | 飛控參數 | 說明 | 建議 |
 |---|---|---|

@@ -1,0 +1,13 @@
+    0.00s  xwing_virtual: 巡航 240m/30m/s 俯衝 30° 拉平 120m Vmax 60m/s 推頭 416m
+    0.00s  目標=移動 起點 (23.0007419, 120.2235203) 方位 180.0° 速度 10.0 m/s  前置瞄準 OFF  (控制: 虛擬軌跡)
+    0.00s  雲台視覺 UART: 未啟用
+   13.75s  ★ GUIDED 上升沿 — 種點 + ARM (任務開始)
+   13.75s  種點(移動): 目標起點 NED=(0.0,0.0) 方位 180.0° 速度 10.0 m/s t0=13.7s
+   13.75s  TECS 目標預送 (背景) ALT=240m SPD=30m/s
+   13.76s  TECS 目標預送完成 ALT=240m SPD=30m/s ok=(True,True)
+   31.97s  ★★ MODE: SEARCH → PRE_DIVE (t=32.0s AGL=0.0 V=4.4 到目標水平距=416m pitch_cmd=-30.0 hdg_cmd=359.5)
+   31.97s  TECS 高度目標 → 120m (背景發送/PRE_DIVE)
+   31.99s  TECS 高度目標 → 120m 完成/PRE_DIVE ok=(True,True)
+   76.99s  ★★ MODE: PRE_DIVE → ABORT (t=77.0s AGL=-0.4 V=3.7 到目標水平距=35m pitch_cmd=+12.0 hdg_cmd=185.0 abort=PREDIVE_TIMEOUT)
+   79.51s  ★★ MODE: ABORT → DONE (t=79.5s AGL=-0.1 V=3.3 到目標水平距=60m pitch_cmd=+12.0 hdg_cmd=185.0 abort=PREDIVE_TIMEOUT)
+  209.24s  程式結束 mode=DONE errors=0 時長 209.2s

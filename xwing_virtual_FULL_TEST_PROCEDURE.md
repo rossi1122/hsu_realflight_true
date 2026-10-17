@@ -328,8 +328,11 @@ roslaunch mavros apm.launch
 
 # Terminal 2 (二選一)
 python3 xwing_virtual_flight.py --moving --dive-hold-heading --case flight1   # 版本 B
-python3 xwing_virtual_flight.py --moving --case flight1                       # 版本 A (Test B、E 都通過才用)
+python3 xwing_virtual_flight.py --moving --case flight1                       # 版本 A (10/17 掛機通過，建議第二趟)
 ```
+
+> ⚠ **開程式前飛控要在 AUTO / FBWA / MANUAL，不能在 GUIDED。** 程式啟動時如果飛控已在 GUIDED，
+> 會立刻當成「GUIDED 上升沿」開始任務 (10/17 地面測試確認)。
 
 ### 3-5. 開機訊息檢查 (有問題就不飛)
 

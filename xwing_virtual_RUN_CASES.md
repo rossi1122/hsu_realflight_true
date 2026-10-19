@@ -32,8 +32,8 @@ python3 xwing_virtual_route.py          # 重新產生路線圖 / 航點 / KML
 
 目標座標已經寫在 `xwing_virtual_config.py`：
 ```
-MOVING_START_GPS   = (23.7221111, 120.3798889)   # 23°43'19.6"N 120°22'47.6"E
-MOVING_HEADING_GPS = (23.720997, 120.379882)     # 方位 180.3° (往南), 距離 124 m
+MOVING_START_GPS   = (23.7217999, 120.3798795)   # 任務規劃 WP4 (2026/10/19)
+MOVING_HEADING_GPS = (23.7206860, 120.3798795)   # 起點正南 124 m, 方位 180.0° (往南)
 TARGET_GPS         = MOVING_START_GPS            # 靜止版
 ```
 
@@ -99,12 +99,13 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
 
 1. 起飛 (照平常方式) → AUTO 爬到 240 m，進跑道。
 2. 程式開著，畫面會每秒印 `[SEARCH  ] ... g=0` (還沒撥 GUIDED)。
-3. 飛機轉完彎、在 **WP1 → WP2 進場邊對正往南** 之後，**飛過 WP2 (目標起點北方 700 m) 時由地面站切 GUIDED**。
+3. 飛機在 **WP2 轉彎點**轉完彎、往南對正後，**飛到 WP3 (轉彎點後約 400 m、目標起點北方 613 m) 時由地面站切 GUIDED**。
+   - 有真車時：飛機**通過 WP2** 時，車子從 **WP4 北方約 95 m** 起步，約 5 s 加到 36 km/h 後定速。
 4. 之後全自動：
 
 | 段 | 觸發 | 預計 (移動 / 靜止) |
 |---|---|---|
-| SEARCH | 撥 GUIDED | 14.2 s / 426 m ・ 9.5 s / 284 m |
+| SEARCH | 撥 GUIDED | 9.9 s / 296 m ・ 6.6 s / 197 m |
 | PRE_DIVE | 到目標水平距 ≤ 415.69 m (= 240/tan30°) | 1.4 s / 43 m |
 | DIVE | pitch 到 −27° 內 | 5.4 s / 187 m，空速 32 → 46 m/s |
 | PULLOUT | AGL ≤ 120 m (預測 0.5 s) 或空速 ≥ 60 m/s | 0.5 s |
@@ -112,7 +113,7 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
 
 5. 看到 `MODE: PULLOUT → DONE` 之後，**撥回 AUTO** (飛機會爬回 240 m 回跑道) 或照 SOP 處理。
 
-> 如果撥 GUIDED 的位置比 WP2 晚 (離目標更近)，SEARCH 會變短；離目標起點不到 415.69 m
+> 如果撥 GUIDED 的位置比 WP3 晚 (離目標更近)，SEARCH 會變短；離目標起點不到 415.69 m
 > 時，一撥下去就會直接推頭，沒有 SEARCH 段讓航向和 TECS 穩定。
 > 建議 SEARCH 至少 8–10 s，也就是撥 GUIDED 時離目標起點至少約 575 m (移動) / 655 m (靜止)。
 
@@ -121,7 +122,7 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
 ## 開機訊息檢查 (每趟都看)
 
 ```
-[xwing] 移動目標: 起點 (23.7221111, 120.3798889) 方位 180.3° 速度 10.0 m/s ...
+[xwing] 移動目標: 起點 (23.7217999, 120.3798795) 方位 180.0° 速度 10.0 m/s ...
 [xwing] 巡航 240 m / 30 m/s, 俯衝 30° → 120 m 拉平, 速度上限 60 m/s
 [xwing] 推頭門檻: 到目標水平距 ≤ 416 m (純幾何 416 m)
 [Bridge] PTCH_LIM_MIN_DEG=-40° OK (需求 -40°)

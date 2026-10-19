@@ -66,8 +66,8 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
 
 可以加在任何 case 後面的選項:
     --vision-port /dev/serial/by-id/usb-XXXX   指定雲台串口 (config 沒改時)
-    --start 23.7221111,120.3798889             臨時改移動目標起點 (lat,lon)
-    --target 23.7221111,120.3798889            臨時改靜止目標 (lat,lon)
+    --start 23.7217999,120.3798795             臨時改移動目標起點 (lat,lon) (預設已是 WP4)
+    --target 23.7217999,120.3798795            臨時改靜止目標 (lat,lon)
     --case 名字                                 加進 log 檔名, 方便分辨
     --no-vision                                 當天沒接雲台 (不開 UART)
     --no-gimbal-cmd                             收雲台資料但不送模式鍵
@@ -86,7 +86,7 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
 4. 開機訊息檢查 (每趟都看, 有問題就不要飛)
 ------------------------------------------------------------------
 要看到:
-  [xwing] 移動目標: 起點 (23.7221111, 120.3798889) 方位 180.3° 速度 10.0 m/s ...
+  [xwing] 移動目標: 起點 (23.7217999, 120.3798795) 方位 180.0° 速度 10.0 m/s ...
   [xwing] 巡航 240 m / 30 m/s, 俯衝 30° → 120 m 拉平, 速度上限 60 m/s
   [xwing] 推頭門檻: 到目標水平距 ≤ 416 m (純幾何 416 m)
   [xwing] 雲台視覺 UART: <串口> @ 115200 (資料只記錄); 模式鍵 ON
@@ -114,9 +114,10 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
 ------------------------------------------------------------------
 1) 起飛 (X-wing 不是 VTOL, 照平常方式) → AUTO 爬到 240 m 進跑道
    畫面每秒印 [SEARCH  ] ... g=0  (還沒撥 GUIDED)
-2) 飛機轉完彎、航向已對正目標起點 (往南) 之後, 到 GUIDED 切換點由地面站切 GUIDED
+2) 飛機在 WP2 轉彎點轉完彎、往南對正後, 飛到 WP3 (轉彎點後約 400 m) 由地面站切 GUIDED
    (Mission Planner → Actions → GUIDED → Set Mode; 數傳延遲約 0.5–1 s, 可稍提早)
-   (撥 GUIDED 時離目標起點至少約 575 m (移動) / 655 m (靜止), SEARCH 才有 8–10 s)
+   (WP3 → WP4 目標起點 613 m, SEARCH 約 9.9 s; 不要晚切, 晚 1 s 就少 1 s)
+   有真車時: 飛機通過 WP2 → 車子從 WP4 北方約 95 m 起步, 約 5 s 加到 36 km/h 後定速
 3) 之後全自動, 畫面應該依序出現:
 
    ★ GUIDED 上升沿 — 種點 + ARM (任務開始)
@@ -130,7 +131,7 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
    ★★ MODE: DIVE → PULLOUT
    ★★ MODE: PULLOUT → DONE        (TECS 120 m / 30 m/s 平飛)
 
-   預計時間 (移動): SEARCH 約 14 s → PRE_DIVE 約 1.4 s → DIVE 約 5.4 s → PULLOUT 0.5 s
+   預計時間 (移動): SEARCH 約 9.9 s → PRE_DIVE 約 1.4 s → DIVE 約 5.4 s → PULLOUT 0.5 s
 
 4) 看到 MODE: PULLOUT → DONE 之後 → 撥回 AUTO (爬回 240 m 回跑道) 或照 SOP 處理
 

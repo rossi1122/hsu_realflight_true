@@ -287,24 +287,25 @@ python3 test_rudder_bench.py --test E --rudder-ch 3 --elevator-ch 2
 
 ### 3-1. 到場設定
 
-1. **目標起點**：確認 `MOVING_START_GPS = (23.7221111, 120.3798889)` 在場地上是對的位置。
+1. **目標起點**：`MOVING_START_GPS = (23.7217999, 120.3798795)` = 任務規劃 **WP4** (2026/10/19)。
    要移動起點時，飛行指令加 `--start lat,lon`。
-2. **航線**：Mission Planner 載入 `xwing_virtual_mission.waypoints` (240 m 跑道)：
+2. **航線**：用你在 Mission Planner 規劃好的任務 (WP1–WP6 + DO_JUMP)：
 
    | 航點 | 說明 |
    |---|---|
-   | WP1 | 進場邊起點 (目標起點北方約 1300 m) |
-   | WP2 | **撥 GUIDED 的參考點** (目標起點北方 700 m) |
-   | WP3 | 進場邊終點 (目標起點南方 500 m) |
-   | WP4、WP5 | 東側回程邊 |
+   | WP1 → WP2 | 北邊往東飛，WP2 是**轉彎點** (轉往南) |
+   | **WP3** | **切 GUIDED 點**：WP2 後約 400 m、目標起點北方約 613 m |
+   | **WP4** | **虛擬目標起點** (23.7217999, 120.3798795) |
+   | WP5、WP6 | 西側回程 |
    | DO_JUMP | 回 WP1，無限繞 |
 
    - 起飛和降落照你們平常 X-wing 的方式加在前後 (`Q_ENABLE = 0`，**不是 VTOL**)
-   - 如果你有自己規劃的 GUIDED 切換點，以你的為準：**轉彎完成、航向已對正目標起點、離目標起點至少約 575 m**
+   - 參考航線：`xwing_virtual_mission.waypoints` (程式依同樣距離產生，對照見 README 5.2)
 3. **圍欄**：多邊形 (`FENCE_TYPE = 4`) 要包住整條跑道、俯衝和拉平段。
    碰到圍欄會 RTL，而且 `FENCE_OPTIONS = 1`，回到圍欄內之前**不能切模式**。
 4. 上傳航線和圍欄，再讀回來確認。
-5. (有真車時) 車子停在目標起點，**撥 GUIDED 那一刻**往南出發，**36 km/h (10 m/s)**。用無線電倒數。
+5. (有真車時) 車子停在 **WP4 北方約 95 m**，車頭朝南。飛機**通過 WP2 轉彎點**時地面站喊「開」，
+   車子約 5 s 加到 **36 km/h** 後定速 → 切 GUIDED 那一刻剛好通過 WP4。WP4 以南要有約 250 m 的路。
 
 ### 3-2. 開機
 
@@ -338,7 +339,7 @@ python3 xwing_virtual_flight.py --moving --case flight1                       # 
 
 要看到：
 ```
-[xwing] 移動目標: 起點 (23.7221111, 120.3798889) 方位 180.3° 速度 10.0 m/s ...
+[xwing] 移動目標: 起點 (23.7217999, 120.3798795) 方位 180.0° 速度 10.0 m/s ...
 [xwing] 巡航 240 m / 30 m/s, 俯衝 30° → 120 m 拉平, 速度上限 60 m/s
 [xwing] 推頭門檻: 到目標水平距 ≤ 416 m (純幾何 416 m)
 [xwing] 雲台視覺 UART: ... (資料只記錄); 模式鍵 ON
@@ -376,8 +377,8 @@ python3 xwing_virtual_flight.py --moving --case flight1                       # 
 
 ### 3-7. 撥 GUIDED (任務開始)
 
-1. 飛機轉完彎、在 WP1 → WP2 對正往南後，**飛過 WP2 (或你規劃的 GUIDED 點) 時**，地面站 / 操作員喊「GUIDED」
-2. **地面站** 在 Mission Planner 按 Set Mode **GUIDED** (事先選好 GUIDED，到點只按一下)；(有車的話) 車子同時出發
+1. 飛機在 WP2 轉完彎、往南對正 (通過 WP2 時喊車子起步)，**飛到 WP3 時**，地面站 / 操作員喊「GUIDED」
+2. **地面站** 在 Mission Planner 按 Set Mode **GUIDED** (事先選好 GUIDED，到點只按一下)
    - 經數傳切換約有 0.5–1 s 延遲 (約 15–30 m)，可以稍微提早按
    - 確認 HUD 顯示 Guided、程式出現 `★ GUIDED 上升沿`
 3. 之後全自動。操作員照畫面念出狀態：
@@ -385,10 +386,10 @@ python3 xwing_virtual_flight.py --moving --case flight1                       # 
 | 時間 (撥 GUIDED 後) | 畫面 | 飛機 |
 |---|---|---|
 | 0 s | `★ GUIDED 上升沿 — 種點 + ARM`、`雲台狀態 → SEARCH: 模式鍵 '1'` | 前幾秒機翼保持水平 (韌體內建逾時)，之後朝目標修航向 |
-| 約 14 s | `★★ MODE: SEARCH → PRE_DIVE`、`雲台狀態 → PRE_DIVE: 模式鍵 '2'`、`★ 雲台鎖定到位` | 開始推頭 |
-| 約 15.5 s | `★★ MODE: PRE_DIVE → DIVE` | 30° 俯衝，空速 32 → 46 m/s |
-| 約 21 s | `★★ MODE: DIVE → PULLOUT` | 約 120 m 拉平 |
-| 約 21.5 s | `★★ MODE: PULLOUT → DONE` | 平飛往南，最低約 100 m 後回到 120 m |
+| 約 10 s | `★★ MODE: SEARCH → PRE_DIVE`、`雲台狀態 → PRE_DIVE: 模式鍵 '2'`、`★ 雲台鎖定到位` | 開始推頭 |
+| 約 11.3 s | `★★ MODE: PRE_DIVE → DIVE` | 30° 俯衝，空速 32 → 46 m/s |
+| 約 16.8 s | `★★ MODE: DIVE → PULLOUT` | 約 120 m 拉平 |
+| 約 17.3 s | `★★ MODE: PULLOUT → DONE` | 平飛往南，最低約 100 m 後回到 120 m |
 
 4. 看到 `MODE: PULLOUT → DONE` 之後，地面站切回 **AUTO**，飛機爬回 240 m、回跑道。
 

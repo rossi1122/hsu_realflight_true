@@ -16,7 +16,14 @@ AUTO 跑道 (racetrack) 設計: 進場邊與目標行進方向【同向】(追�
      WP3  進場邊終點   目標起點前方 overrun_m       (沒撥 GUIDED 就飛過去)
      WP4/WP5           側移 side_m 的回程邊
      DO_JUMP → WP1 (無限繞)
-  全部 240 m (相對 home). ★ 起降 (VTOL) 航點請自己加在前後.
+  全部 240 m (相對 home). ★ 起降航點請自己加在前後 (X-wing 不是 VTOL).
+
+  ★ 2026/10/19 預設值對應使用者的 Mission Planner 任務規劃:
+     本檔 WP1 (轉彎後進場起點) ≈ 任務規劃 WP2 轉彎點 (目標起點北方 1013 m)
+     本檔 WP2 (撥 GUIDED)      = 任務規劃 WP3 (轉彎點後 400 m, 目標起點北方 613 m)
+     本檔 WP3 (進場邊終點)      = 任務規劃 WP4 = 目標起點
+     本檔 WP4 / WP5            ≈ 任務規劃 WP5 / WP6、WP1 (西側回程邊)
+     實際飛行以 Mission Planner 裡的任務為準.
 
 用法:
   python3 xwing_virtual_route.py                 # 移動目標
@@ -283,16 +290,18 @@ def plot(path, res, wps, key_pts, road_end_ne, alt):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--static', action='store_true', help='靜止目標')
-    ap.add_argument('--guided-dist', type=float, default=700.0,
-                    help='撥 GUIDED 點: 目標起點後方 m (預設 700)')
-    ap.add_argument('--approach', type=float, default=1300.0,
-                    help='進場邊起點: 目標起點後方 m (預設 1300 → 直線 600 m)')
-    ap.add_argument('--overrun', type=float, default=500.0,
-                    help='進場邊終點: 目標起點前方 m (預設 500)')
-    ap.add_argument('--side-dist', type=float, default=400.0,
-                    help='回程邊側移 m (預設 400, ≥ 2×轉彎半徑)')
-    ap.add_argument('--side', choices=('east', 'west'), default='east',
-                    help='回程邊在進場邊的哪一側 (預設 east)')
+    # 預設值 = 2026/10/19 任務規劃 (Mission Planner):
+    #   WP2 轉彎點 → 400 m → WP3 切 GUIDED → 613 m → WP4 目標起點, 回程邊在西側 ~520 m
+    ap.add_argument('--guided-dist', type=float, default=613.0,
+                    help='撥 GUIDED 點: 目標起點後方 m (預設 613 = WP3→WP4)')
+    ap.add_argument('--approach', type=float, default=1013.0,
+                    help='進場邊起點 (轉彎點): 目標起點後方 m (預設 1013 = WP2, 轉彎後直線 400 m)')
+    ap.add_argument('--overrun', type=float, default=0.0,
+                    help='進場邊終點: 目標起點前方 m (預設 0 = 在 WP4 轉彎)')
+    ap.add_argument('--side-dist', type=float, default=520.0,
+                    help='回程邊側移 m (預設 520, ≥ 2×轉彎半徑)')
+    ap.add_argument('--side', choices=('east', 'west'), default='west',
+                    help='回程邊在進場邊的哪一側 (預設 west)')
     ap.add_argument('--ld', type=float, default=8.0)
     ap.add_argument('--out-prefix', type=str, default=os.path.join(HERE, 'xwing_virtual'))
     args = ap.parse_args()

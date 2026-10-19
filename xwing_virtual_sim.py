@@ -20,7 +20,7 @@ xwing_virtual_sim.py — xwing_virtual 任務剖面模擬 + 各段距離計算
   · DIVE: 怠速; 方向舵依 PID dpsi 修航向
 
 用法:
-  python3 xwing_virtual_sim.py                     # 移動目標, 撥 GUIDED 時距目標 700 m
+  python3 xwing_virtual_sim.py                     # 移動目標, 撥 GUIDED 時距目標 613 m (WP3→WP4)
   python3 xwing_virtual_sim.py --static
   python3 xwing_virtual_sim.py --guided-dist 900   # 改撥 GUIDED 的距離
   python3 xwing_virtual_sim.py --ld 0              # 無阻力 → 最壞末速
@@ -53,7 +53,7 @@ def _wrap(a):
     return (a + 180.0) % 360.0 - 180.0
 
 
-def simulate(cfg=None, moving=True, guided_dist=700.0, predive_dist=None,
+def simulate(cfg=None, moving=True, guided_dist=613.0, predive_dist=None,
              ld=8.0, q_max=20.0, n_max=2.5, dt=0.02, t_after_done=8.0,
              verbose=False):
     """跑一趟任務. 回傳 dict: traj (list of dict), phases (dict), info."""
@@ -322,8 +322,8 @@ def write_csv(res, path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--static', action='store_true', help='靜止目標 (預設移動)')
-    ap.add_argument('--guided-dist', type=float, default=700.0,
-                    help='撥 GUIDED 時飛機在目標起點後方幾公尺 (預設 700)')
+    ap.add_argument('--guided-dist', type=float, default=613.0,
+                    help='撥 GUIDED 時飛機在目標起點後方幾公尺 (預設 613 = 任務規劃 WP3→WP4)')
     ap.add_argument('--predive-dist', type=float, default=None,
                     help='推頭門檻 m (預設用 config)')
     ap.add_argument('--ld', type=float, default=8.0,

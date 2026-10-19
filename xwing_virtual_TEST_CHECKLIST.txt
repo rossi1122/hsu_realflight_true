@@ -222,8 +222,9 @@ Terminal 2 (版本 B):
 建議第一趟版本 B, 第二趟版本 A (在 AUTO 繞圈時 q 結束再重開, 不用落地)
 ★ 開程式前飛控要在 AUTO / FBWA / MANUAL, 不能在 GUIDED
 
-飛行中:
-  - 飛過 GUIDED 點 → 地面站切 GUIDED → 全自動
+飛行中 (任務規劃 2026/10/19: WP2 轉彎點 → 400 m → WP3 切 GUIDED → 613 m → WP4 目標起點):
+  - 飛機通過 WP2 轉彎點 → (有車) 車子從 WP4 北方約 95 m 起步, 約 5 s 加到 36 km/h 後定速
+  - 飛到 WP3 → 地面站切 GUIDED → 全自動 (SEARCH 約 9.9 s 進 PRE_DIVE)
   - 看到 PULLOUT → DONE → 地面站切回 AUTO
   - 出狀況: 飛手把模式開關撥到 FBWA (最快); 或地面站切 AUTO/FBWA; 或 Terminal 2 輸入 x 按 Enter
   - 在 GUIDED 中飛手不要碰搖桿 (STICK_MIXING=1, 搖桿會疊加到命令上)

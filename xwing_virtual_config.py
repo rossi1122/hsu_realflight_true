@@ -168,7 +168,8 @@ class XwingVirtualConfig:
     #    雲台模式鍵則會依任務狀態實際送出 (PRE_DIVE → 鎖定).
     # ════════════════════════════════════════════════════════════
     VISION_UART_ENABLED = True       # 預設開; 沒接雲台時用 --no-vision 關閉
-    VISION_UART_PORT = '/dev/ttyUSB0'
+    # 2026/10/20 實測: 雲台 USB-UART = CP2102 (by-id 固定名稱, 不受 ttyUSB 編號影響)
+    VISION_UART_PORT = '/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0'
     #   ⚠ 建議改成固定名稱 /dev/serial/by-id/usb-...,
     #     ttyUSB0/1 的編號開機時可能互換 (尤其飛控也走 USB 時).
     VISION_UART_BAUD = 115200        # 必須與對方發送端相同

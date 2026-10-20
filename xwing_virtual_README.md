@@ -1,5 +1,19 @@
 # xwing_virtual — 純虛擬軌跡俯衝版 (無視覺)
 
+> ## ★ 從這裡開始 (2026/10/20)
+>
+> | 要做什麼 | 看哪份 |
+> |---|---|
+> | **飛行日** | **`xwing_virtual_prepare_flight.txt`** (實飛 SOP：設定 → 開機 → 指令 → 飛行 → 落地) |
+> | 還剩哪些測試 | `xwing_virtual_TEST_CHECKLIST.txt` (第 1–9、11 項已通過；剩第 10 項) |
+> | 地面測試指令 | `xwing_virtual_prepare_ground.txt` |
+> | 完整說明 (人員、判斷表、緊急處理) | `xwing_virtual_FULL_TEST_PROCEDURE.md` |
+> | 測試結果 | `xwing_virtual_TEST_REPORT_20261017.md` (飛機、方向舵)、`xwing_virtual_TEST_REPORT_20261020.md` (雲台) |
+> | 雲台介面 / 地面測試細節 | `xwing_virtual_GIMBAL_UART.md`、`xwing_virtual_GIMBAL_GROUND_TEST.md` |
+>
+> 目前狀態：X-wing 參數、方向舵、整機掛機、雲台整合都通過。目標起點 = 任務規劃 WP4，WP3 切 GUIDED。
+> 實飛只要 `python3 xwing_virtual_flight.py --moving --dive-hold-heading` (版本 B) 或 `--moving` (版本 A)。
+
 這一版從原本的 vision_dive (`run_vision_flight.py`) 改出來，條件如下：
 
 | 項目 | 原版 | **xwing_virtual** |
@@ -47,7 +61,9 @@
 | `xwing_virtual_FULL_TEST_PROCEDURE.md` | (新) | ★ X-wing 完整測試流程：出發前準備 → 雲台 / 飛機地面測試 → 飛行 → 飛行後 |
 | `xwing_virtual_TEST_CHECKLIST.txt` | (新) | 測試總清單 (照順序打勾)；10/17 已完成第 1–6 項 |
 | `xwing_virtual_TEST_REPORT_20261017.md` | (新) | ★ 2026/10/17 X-wing 地面測試報告 (參數、方向舵 A/B/E、整機掛機) |
+| `xwing_virtual_TEST_REPORT_20261020.md` | (新) | ★ 2026/10/20 雲台整合地面測試報告 (模式鍵、鎖定時間、資料鏈) |
 | `test_records/20261017_xwing/` | (資料) | 10/17 原始資料：參數檔、方向舵測試 CSV、掛機與實飛指令 log |
+| `test_records/20261020_gimbal/` | (資料) | 10/20 原始資料：雲台模式測試 CSV、整機掛機 + 雲台 log |
 | `xwing_virtual_RUDDER_BENCH.md` | (新) | X-wing 方向舵掛機測試流程 |
 | `xwing_virtual_GIMBAL_UART.md` | (新) | ★ 對方實驗室雲台視覺 UART 整合說明 (接線、協定、模式鍵對應、待確認問題) |
 | `xwing_virtual_GIMBAL_GROUND_TEST.md` | (新) | ★ 雲台鎖定模式地面測試步驟 (桌上自測 → 接線 → 看雲台轉到 −30° → 整機掛機) |

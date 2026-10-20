@@ -2,7 +2,7 @@
  X-wing 實飛 SOP (飛行日照這份做)
  240 m / 30 m/s 巡航 → 30 度俯衝 → 120 m 拉平, 速度上限 60 m/s
  控制: 純虛擬軌跡    雲台: 對方 Orin NX (UART 模式鍵, 只記錄)
- 更新: 2026/10/20 (第 1~9、11 項地面測試已通過)
+ 更新: 2026/10/20 (第 1~9、11 項地面測試已通過; 兩台相機都測過)
 ==================================================================
 
 測試結果: xwing_virtual_TEST_REPORT_20261017.md (飛機、方向舵)
@@ -19,6 +19,14 @@
          sudo chmod 666 /dev/ttyUSB0     # 雲台)
   [v] 雲台串口 (config 預設):
       /dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0
+      兩台相機的 USB-UART 都是這個名稱 → 換相機不用改任何東西
+      ★ 手打這串很容易錯 (多打 usb- / 少字), 用 Tab 補完, 或下面的 /dev/gimbal
+  [ ] (建議) udev 固定名稱 /dev/gimbal + 自動開權限, 做一次就好:
+        echo 'SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="gimbal", MODE="0666"' \
+          | sudo tee /etc/udev/rules.d/99-gimbal.rules
+        sudo udevadm control --reload-rules && sudo udevadm trigger
+        拔插雲台 USB → ls -l /dev/gimbal 看到 -> ttyUSB0 就好
+      (Orin NX 上只能插一個 CP2102; 飛控是 ttyACM0 不受影響)
   [v] 虛擬目標起點 = 任務規劃 WP4 (23.7217999, 120.3798795), 往南 10 m/s
   [v] 飛控: PTCH_LIM_MIN_DEG -45, AIRSPEED_MAX 60, GUIDED 由地面站切
   [v] 方向舵: Test A / B / E 通過, 正舵量 = 右偏航 (版本 A 可用)
@@ -78,6 +86,7 @@ Terminal 2 (到專案資料夾):
     python3 xwing_virtual_flight.py --moving --case flight2_A \
             2>&1 | tee console_flight2_A.txt
 
+  ★ --case 照抄上面 (flight1_B / flight2_A), log 檔名就看得出版本
   當天沒接雲台: 指令後面加 --no-vision
   ★ 實飛【不要】加: --bench  --bench-dive  --ground-test  --start  --tgt-heading
 
@@ -88,6 +97,7 @@ Terminal 2 (到專案資料夾):
 要看到:
   [xwing] 移動目標: 起點 (23.7217999, 120.3798795) 方位 180.0° 速度 10.0 m/s ...
   [xwing] 推頭門檻: 到目標水平距 ≤ 416 m
+  DIVE 方向舵: 版本 B (--dive-hold-heading, 不打方向舵)   ← 第二趟要是「版本 A」
   [xwing] 雲台視覺 UART: /dev/serial/by-id/usb-Silicon_Labs_CP2102... (資料只記錄); 模式鍵 ON
   [UARTVision] 已開啟 /dev/serial/by-id/usb-Silicon_Labs_CP2102... @ 115200 8N1
   [Bridge] PTCH_LIM_MIN_DEG=-45° OK
@@ -103,6 +113,9 @@ Terminal 2 (到專案資料夾):
 可以飛, 但這趟沒有雲台資料:
   Permission denied / 串口開不了 / VIS link=0 一直不變 / 模式鍵 OFF
 
+在實驗室用實飛指令切 GUIDED: 副翼、V 尾會打滿 = 飛控自己要轉向 82 km 外的 WP4, 正常
+  (我們的程式沒打方向舵; 實飛在 WP3 切, 機頭已朝南, 不會這樣)
+
 
 ==================================================================
  G. 飛行
@@ -116,12 +129,13 @@ Terminal 2 (到專案資料夾):
 
 4) 之後全自動, 畫面依序 (時間 = 切 GUIDED 後):
      0 s     ★ GUIDED 上升沿 — 種點 + ARM
+             切 GUIDED 時離目標起點 約 600 m       (★ 出現「> 3 km」= 切錯地方, 這趟不會俯衝)
              雲台狀態 → SEARCH: 模式鍵 '1'
-     ~0.3 s  雲台回報模式 '1' 已確認              (雲台追蹤)
+     ≤0.3 s  雲台回報模式 '1' 已確認              (雲台追蹤)
      ~10 s   ★★ MODE: SEARCH → PRE_DIVE         (推頭)
              雲台狀態 → PRE_DIVE: 模式鍵 '2'
      ~10 s   雲台回報模式 '2' 已確認
-     ≤11 s   ★ 雲台鎖定到位 pitch=-29.x°        (地面實測 1.0 s 內)
+     ≤11 s   ★ 雲台鎖定到位 pitch=-29.x°        (地面實測: 相機1 1.0 s, 相機2 0.5 s)
      ~11.3 s ★★ MODE: PRE_DIVE → DIVE           (30° 俯衝, 空速 32→46 m/s)
      ~16.8 s ★★ MODE: DIVE → PULLOUT            (約 120 m 拉平)
      ~17.3 s ★★ MODE: PULLOUT → DONE            (平飛往南, 最低約 105 m)

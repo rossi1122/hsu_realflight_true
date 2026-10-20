@@ -488,6 +488,8 @@ def main():
     event(f"xwing_virtual: 巡航 {cfg.CRUISE_AGL_M:.0f}m/{cfg.V_CRUISE_MPS:.0f}m/s "
           f"俯衝 {cfg.DIVE_ANGLE_DEG:.0f}° 拉平 {cfg.PULLOUT_AGL_M:.0f}m "
           f"Vmax {cfg.PULLOUT_VMAX_MPS:.0f}m/s 推頭 {predive_dist:.0f}m")
+    event("DIVE 方向舵: " + ("版本 B (--dive-hold-heading, 不打方向舵)"
+                             if args.dive_hold_heading else "版本 A (方向舵 PID)"))
     event(f"目標={'移動' if moving else '靜止'} 起點 {start_gps} "
           f"方位 {heading:.1f}° 速度 {speed} m/s  前置瞄準 "
           f"{'ON' if gcfg.DIVE_TARGET_LEAD else 'OFF'}  (控制: 虛擬軌跡)")
@@ -532,6 +534,14 @@ def main():
     pid_last_t = None
 
     def do_arm(s, t):
+        # 切 GUIDED 時飛機離目標起點多遠: 實飛在 WP3 約 0.6 km;
+        # 太遠 = --start 打錯或在實驗室 (到不了推頭距離, 不會俯衝).
+        an, ae = gps_to_ned(s['lat'], s['lon'], o_lat, o_lon)
+        d0 = math.hypot(an, ae)
+        event(f"切 GUIDED 時離目標起點 {d0:.0f} m")
+        if d0 > 3000.0:
+            event(f"★ 離目標起點 {d0 / 1000:.1f} km (> 3 km) — 這趟不會進 PRE_DIVE; "
+                  f"實飛請檢查 --start / 是否在 WP3 才切 GUIDED")
         if moving:
             virt.target.t0 = t
             tn, te, _, _ = virt.target_now(t)

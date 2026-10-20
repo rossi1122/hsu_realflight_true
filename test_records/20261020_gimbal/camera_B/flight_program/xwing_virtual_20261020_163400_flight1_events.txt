@@ -1,0 +1,12 @@
+    0.00s  xwing_virtual: 巡航 240m/30m/s 俯衝 30° 拉平 120m Vmax 60m/s 推頭 416m
+    0.00s  目標=移動 起點 (23.7217999, 120.3798795) 方位 180.0° 速度 10.0 m/s  前置瞄準 OFF  (控制: 虛擬軌跡)
+    0.00s  雲台視覺 UART: /dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0 @ 115200 只記錄; 模式鍵 ON {'STANDBY': None, 'SEARCH': '1', 'PRE_DIVE': '2', 'DIVE': '2', 'PULLOUT': None, 'DONE': None, 'ABORT': None}
+    0.15s  雲台狀態 → STANDBY: 模式鍵 不要求
+   12.99s  ★ GUIDED 上升沿 — 種點 + ARM (任務開始)
+   12.99s  種點(移動): 目標起點 NED=(0.0,0.0) 方位 180.0° 速度 10.0 m/s t0=13.0s
+   12.99s  TECS 目標預送 (背景) ALT=240m SPD=30m/s
+   12.99s  雲台狀態 → SEARCH: 模式鍵 '1'
+   13.01s  TECS 目標預送完成 ALT=240m SPD=30m/s ok=(True,True)
+   13.07s  雲台回報模式 '1' 已確認 (要求後 0.07s)
+   32.40s  雲台視覺 UART 統計: {'frames': 970, 'clock': 17, 'bytes': 81156, 'header': 0, 'crc': 0, 'payload': 0, 'discarded': 0, 'reopen': 0, 'mode_tx': 1, 'serial_err': 0, 'open_fail': 0}
+   32.40s  程式結束 mode=SEARCH errors=0 時長 32.4s

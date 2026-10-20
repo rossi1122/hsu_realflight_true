@@ -63,7 +63,7 @@
 | `xwing_virtual_TEST_REPORT_20261017.md` | (新) | ★ 2026/10/17 X-wing 地面測試報告 (參數、方向舵 A/B/E、整機掛機) |
 | `xwing_virtual_TEST_REPORT_20261020.md` | (新) | ★ 2026/10/20 雲台整合地面測試報告 (模式鍵、鎖定時間、資料鏈) |
 | `test_records/20261017_xwing/` | (資料) | 10/17 原始資料：參數檔、方向舵測試 CSV、掛機與實飛指令 log |
-| `test_records/20261020_gimbal/` | (資料) | 10/20 原始資料：雲台模式測試 CSV、整機掛機 + 雲台 log |
+| `test_records/20261020_gimbal/` | (資料) | 10/20 原始資料：雲台模式測試 CSV、整機掛機 + 雲台 log；`camera_B/` = 第二台相機 |
 | `xwing_virtual_RUDDER_BENCH.md` | (新) | X-wing 方向舵掛機測試流程 |
 | `xwing_virtual_GIMBAL_UART.md` | (新) | ★ 對方實驗室雲台視覺 UART 整合說明 (接線、協定、模式鍵對應、待確認問題) |
 | `xwing_virtual_GIMBAL_GROUND_TEST.md` | (新) | ★ 雲台鎖定模式地面測試步驟 (桌上自測 → 接線 → 看雲台轉到 −30° → 整機掛機) |

@@ -1,0 +1,22 @@
+    0.00s  xwing_virtual: 巡航 240m/30m/s 俯衝 30° 拉平 120m Vmax 60m/s 推頭 416m
+    0.00s  目標=移動 起點 (23.001, 120.22348) 方位 180.0° 速度 10.0 m/s  前置瞄準 OFF  (控制: 虛擬軌跡)
+    0.00s  雲台視覺 UART: /dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0 @ 115200 只記錄; 模式鍵 ON {'STANDBY': None, 'SEARCH': '1', 'PRE_DIVE': '2', 'DIVE': '2', 'PULLOUT': None, 'DONE': None, 'ABORT': None}
+    0.15s  雲台狀態 → STANDBY: 模式鍵 不要求
+   19.11s  ★ GUIDED 上升沿 — 種點 + ARM (任務開始)
+   19.11s  種點(移動): 目標起點 NED=(0.0,0.0) 方位 180.0° 速度 10.0 m/s t0=19.1s
+   19.11s  TECS 目標預送 (背景) ALT=240m SPD=30m/s
+   19.11s  雲台狀態 → SEARCH: 模式鍵 '1'
+   19.12s  TECS 目標預送完成 ALT=240m SPD=30m/s ok=(True,True)
+   19.13s  雲台回報模式 '1' 已確認 (要求後 0.01s)
+   54.81s  ★★ MODE: SEARCH → PRE_DIVE (t=54.8s AGL=0.0 V=0.5 到目標水平距=243m pitch_cmd=-30.0 hdg_cmd=0.1)
+   54.81s  TECS 高度目標 → 120m (背景發送/PRE_DIVE)
+   54.81s  雲台狀態 → PRE_DIVE: 模式鍵 '2'
+   54.82s  TECS 高度目標 → 120m 完成/PRE_DIVE ok=(True,True)
+   54.87s  雲台回報模式 '2' 已確認 (要求後 0.05s)
+   55.23s  ★ 雲台鎖定到位 pitch=-28.4° (要求後 0.41s, 任務狀態 PRE_DIVE)
+   99.83s  ★★ MODE: PRE_DIVE → ABORT (t=99.8s AGL=-0.2 V=3.8 到目標水平距=206m pitch_cmd=+12.0 hdg_cmd=179.4 abort=PREDIVE_TIMEOUT)
+   99.83s  雲台狀態 → ABORT: 模式鍵 不要求
+  102.35s  ★★ MODE: ABORT → DONE (t=102.3s AGL=0.0 V=2.5 到目標水平距=231m pitch_cmd=+12.0 hdg_cmd=179.4 abort=PREDIVE_TIMEOUT)
+  102.35s  雲台狀態 → DONE: 模式鍵 不要求
+  102.59s  雲台視覺 UART 統計: {'frames': 3076, 'clock': 52, 'bytes': 257355, 'header': 0, 'crc': 0, 'payload': 0, 'discarded': 71, 'reopen': 0, 'mode_tx': 1, 'serial_err': 0, 'open_fail': 0}
+  102.59s  程式結束 mode=DONE errors=0 時長 102.6s

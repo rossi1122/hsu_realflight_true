@@ -142,10 +142,20 @@ Terminal 2 (到專案資料夾):
 
 5) 看到 PULLOUT → DONE → 地面站切回 AUTO (爬回 240 m)
 
-6) 要再飛一趟: 在 AUTO 繞圈時 Terminal 2 輸入 q → 換 --case 重開 →
-   看開機訊息 → 下一圈到 WP3 再切 GUIDED
+6) 要再飛一趟:
+   同一個版本 → 不用重開程式, 下一圈到 WP3 再切 GUIDED 就是新的一趟
+                (目標重新從 WP4 出發; log 的 run 欄位 = 第幾趟)
+   換版本 (B → A) → 在 AUTO 繞圈時 Terminal 2 輸入 q → 打版本 A 的指令重開 →
+                看開機訊息 → 下一圈到 WP3 再切 GUIDED
 
-中止:
+★ 切換規則 (程式自動處理):
+   · 任何時候都可以切出 GUIDED, 飛控立刻不聽程式的
+   · 切出超過 1 s → 這一趟結束並重置, 畫面出現「任務重置 — 下次撥 GUIDED = 第 N 趟」
+   · 再切 GUIDED → 新的一趟從頭開始
+   · 切 GUIDED 時離 WP4 < 450 m, 或已經飛過 WP4 → 出現「不啟動任務」,
+     程式只保持航向直飛, 不會推頭 → 切回 AUTO, 下一圈到 WP3 再切
+
+中止 (中止後不用重開程式, 下一圈到 WP3 再切 GUIDED 即可重飛):
   ★ 最快: 飛手模式開關撥到 FBWA (要跟目前位置不同才會切)
   地面站: Mission Planner 切 AUTO / FBWA
   機載: Terminal 2 輸入 x 按 Enter → 拉起 2.5 s 後放手

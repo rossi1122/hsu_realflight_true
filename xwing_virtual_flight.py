@@ -21,6 +21,8 @@ xwing_virtual_flight.py — xwing_virtual 實飛主程式 (純虛擬軌跡, 無�
 
 任務 (參數見 xwing_virtual_config.py):
   AUTO 240 m / 30 m/s 對準 → 撥 GUIDED = 任務開始 (虛擬目標從起點出發)
+  ★ 每次撥 GUIDED = 一趟新任務: 中途切出 GUIDED (≥ REARM_OFF_S) → 這趟結束並重置,
+    再撥 GUIDED 就重新種點 (目標回到起點、重新計時). 不用重開程式.
   → SEARCH: 飛控 43002 朝目標直飛, TECS 定高 240 m / 30 m/s
   → 到目標水平距 ≤ PREDIVE_DIST_M (= 240 / tan30° = 415.69 m)
     → PRE_DIVE 直接命令 pitch −30°
@@ -82,7 +84,7 @@ NED_ORIGIN = None
 #   與 run_vision_flight 主 log 相同的欄位名稱 (後處理/畫圖程式可直接沿用),
 #   拿掉: frame_idx / vis_age_ms / vis_new / img_to_cmd_ms / real_* / gcomp_*.
 CSV_FIELDS = [
-    't', 'gps_unix', 'mode', 'guided',
+    't', 'gps_unix', 'run', 'mode', 'guided',
     # 飛機狀態 (NED)
     'ac_n', 'ac_e', 'agl', 'V', 'chi_deg', 'gamma_deg', 'theta_deg',
     'roll_deg', 'yaw_deg', 'vn', 've', 'vd', 'dt',
@@ -521,6 +523,8 @@ def main():
     rate = rospy.Rate(LOOP_HZ)
     half_w, half_h = cfg.IMG_W / 2.0, cfg.IMG_H / 2.0
     guided_prev = False
+    guided_off_t = None          # 最近一次離開 GUIDED 的時刻 (None = 在 GUIDED / 已重置)
+    run_idx = 1                  # 第幾趟任務 (每次重置 +1)
     mode_prev = sm.mode
     last_print = 0.0
     err_count = 0
@@ -532,6 +536,26 @@ def main():
     scored = {'done': False}
     _miss_warned = False
     pid_last_t = None
+
+    def arm_check(s):
+        """撥 GUIDED 時能不能開始任務. 回傳 None = 可以; 否則 = 拒絕原因.
+        太近 (< ARM_MIN_DIST_M) 或已經飛過目標 → 一撥就推頭 / 往回俯衝, 不准.
+        掛機 (--bench / --ground-test) 不檢查."""
+        if args.bench or args.ground_test:
+            return None
+        an, ae = gps_to_ned(s['lat'], s['lon'], o_lat, o_lon)
+        d0 = math.hypot(an, ae)
+        if d0 < cfg.ARM_MIN_DIST_M:
+            return (f"離目標起點只有 {d0:.0f} m (< {cfg.ARM_MIN_DIST_M:.0f} m), "
+                    f"一撥就會推頭")
+        # 方位只在 3 km 內檢查 (更遠 = 實驗室 / 起點打錯, 到不了推頭距離, 由另一則警告處理)
+        if s['compass_hdg'] is not None and 1.0 < d0 <= 3000.0:
+            brg = math.degrees(math.atan2(-ae, -an)) % 360.0
+            off = abs((brg - s['compass_hdg'] + 180.0) % 360.0 - 180.0)
+            if off > cfg.ARM_MAX_BEARING_OFF_DEG:
+                return (f"目標起點不在機頭前方 (方位差 {off:.0f}° > "
+                        f"{cfg.ARM_MAX_BEARING_OFF_DEG:.0f}°), 已經飛過或方向不對")
+        return None
 
     def do_arm(s, t):
         # 切 GUIDED 時飛機離目標起點多遠: 實飛在 WP3 約 0.6 km;
@@ -578,21 +602,49 @@ def main():
                 s = io.snapshot()
 
                 if s['guided'] and not guided_prev:
+                    guided_off_t = None
                     if sm.mode == sm.SEARCH and not sm.mission_armed:
-                        event("★ GUIDED 上升沿 — 種點 + ARM (任務開始)")
-                        if s['lat'] is not None:
+                        _why = arm_check(s) if s['lat'] is not None else "沒有 GPS"
+                        if _why is None:
+                            event(f"★ GUIDED 上升沿 — 種點 + ARM (第 {run_idx} 趟任務開始)")
                             do_arm(s, t)
-                    elif sm.mode == sm.DONE:
-                        print("[xwing] 任務已結束 (DONE) — 重啟程式再飛")
+                        else:
+                            event(f"★★ GUIDED 上升沿 — 不啟動任務: {_why}. "
+                                  f"程式只保持當下航向直飛; 切回 AUTO, 下一圈到 WP3 再撥")
+                    else:
+                        event(f"GUIDED 上升沿 — 離開不到 {cfg.REARM_OFF_S:.1f}s, "
+                              f"沿用第 {run_idx} 趟 (mode={sm.mode})")
+                elif guided_prev and not s['guided']:
+                    guided_off_t = t
+                    if sm.mission_armed or sm.mode != sm.SEARCH:
+                        event(f"★ 離開 GUIDED (fc_mode={s['fc_mode']}) — "
+                              f"第 {run_idx} 趟結束 (mode={sm.mode})")
                 guided_prev = s['guided']
+
+                # ── 離開 GUIDED 超過 REARM_OFF_S → 重置, 下次撥 GUIDED = 新的一趟 ──
+                #   (短暫跳動不重置: 狀態機自己已把 PRE_DIVE/DIVE/PULLOUT 結束成 DONE)
+                if (guided_off_t is not None
+                        and t - guided_off_t >= cfg.REARM_OFF_S
+                        and (sm.mission_armed or sm.mode != sm.SEARCH)):
+                    guided_off_t = None
+                    sm = MissionStateMachine(gcfg, verbose=True)
+                    mode_prev = sm.mode
+                    scored['done'] = False
+                    run_idx += 1
+                    event(f"任務重置 — 下次撥 GUIDED = 第 {run_idx} 趟 "
+                          f"(目標回到起點重新出發)")
 
                 if flags['arm']:
                     flags['arm'] = False
                     if sm.mission_armed:
                         print("[xwing] 任務已 ARM, 忽略 'd'")
                     elif s['guided'] and s['lat'] is not None:
-                        event("★ 鍵盤 'd' — 種點 + ARM")
-                        do_arm(s, t)
+                        _why = arm_check(s)
+                        if _why is None:
+                            event("★ 鍵盤 'd' — 種點 + ARM")
+                            do_arm(s, t)
+                        else:
+                            event(f"★★ 鍵盤 'd' — 不啟動任務: {_why}")
                 if flags['abort']:
                     flags['abort'] = False
                     sm.operator_abort(t)
@@ -750,6 +802,7 @@ def main():
                 row = {
                     't': round(t, 3),
                     'gps_unix': (f"{s['gps_unix']:.3f}" if s['gps_unix'] is not None else ''),
+                    'run': run_idx,
                     'mode': out['mode'], 'guided': int(s['guided']),
                     'ac_n': round(ac_n, 2), 'ac_e': round(ac_e, 2),
                     'agl': _r(agl), 'V': round(V, 2),

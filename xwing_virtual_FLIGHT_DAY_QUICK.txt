@@ -17,7 +17,7 @@ python3 xwing_virtual_flight.py --moving --case flight2_A 2>&1 | tee console_fli
 【飛行中 Terminal 2】  x + Enter = 中止    q + Enter = 結束 (換版本 / 落地後)
                       最快中止: 飛手撥 FBWA
 【重飛】 同版本不用重開: 切出 GUIDED → 下一圈到 WP3 再切 GUIDED = 新的一趟
-        出現「不啟動任務」= 切太晚 → 切回 AUTO, 下一圈再切
+        出現「不啟動任務」= 位置/高度/方向不對 → 切回 AUTO, 下一圈到 WP3 再切
 
 【落地後】
 python3 xwing_gimbal_mode_test.py   → 按 s → 按 q    (雲台回追蹤)

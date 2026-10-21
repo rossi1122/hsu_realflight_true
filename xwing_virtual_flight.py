@@ -524,7 +524,7 @@ def main():
     half_w, half_h = cfg.IMG_W / 2.0, cfg.IMG_H / 2.0
     guided_prev = False
     guided_off_t = None          # 最近一次離開 GUIDED 的時刻 (None = 在 GUIDED / 已重置)
-    run_idx = 1                  # 第幾趟任務 (每次重置 +1)
+    run_idx = 0                  # 第幾趟任務 (每次 ARM +1; 0 = 還沒開始過)
     mode_prev = sm.mode
     last_print = 0.0
     err_count = 0
@@ -537,35 +537,48 @@ def main():
     _miss_warned = False
     pid_last_t = None
 
+    arm_min_dist = predive_dist + cfg.ARM_MIN_MARGIN_M   # 跟著推頭距離 (--predive-dist) 走
+
     def arm_check(s):
         """撥 GUIDED 時能不能開始任務. 回傳 None = 可以; 否則 = 拒絕原因.
-        太近 (< ARM_MIN_DIST_M) 或已經飛過目標 → 一撥就推頭 / 往回俯衝, 不准.
+        空中 (AGL ≥ ARM_GROUND_AGL_M) 必須同時滿足:
+          高度 ≥ ENTRY_MIN_AGL_M; 推頭距離 + ARM_MIN_MARGIN_M ≤ 離起點 ≤ ARM_MAX_DIST_M;
+          起點在機頭前方 ARM_MAX_BEARING_OFF_DEG 內.
+        地面 (實驗室用實飛指令測試) 不檢查: ENTRY_MIN_AGL_M 讓地面永遠不會推頭.
         掛機 (--bench / --ground-test) 不檢查."""
         if args.bench or args.ground_test:
             return None
+        agl = s['rel_alt']
+        if agl is not None and agl < cfg.ARM_GROUND_AGL_M:
+            return None
+        if agl is None or agl < cfg.ENTRY_MIN_AGL_M:
+            return (f"高度 {agl if agl is not None else float('nan'):.0f} m "
+                    f"(< {cfg.ENTRY_MIN_AGL_M:.0f} m), 到不了推頭條件")
         an, ae = gps_to_ned(s['lat'], s['lon'], o_lat, o_lon)
         d0 = math.hypot(an, ae)
-        if d0 < cfg.ARM_MIN_DIST_M:
-            return (f"離目標起點只有 {d0:.0f} m (< {cfg.ARM_MIN_DIST_M:.0f} m), "
+        if d0 < arm_min_dist:
+            return (f"離目標起點只有 {d0:.0f} m (< {arm_min_dist:.0f} m), "
                     f"一撥就會推頭")
-        # 方位只在 3 km 內檢查 (更遠 = 實驗室 / 起點打錯, 到不了推頭距離, 由另一則警告處理)
-        if s['compass_hdg'] is not None and 1.0 < d0 <= 3000.0:
-            brg = math.degrees(math.atan2(-ae, -an)) % 360.0
-            off = abs((brg - s['compass_hdg'] + 180.0) % 360.0 - 180.0)
-            if off > cfg.ARM_MAX_BEARING_OFF_DEG:
-                return (f"目標起點不在機頭前方 (方位差 {off:.0f}° > "
-                        f"{cfg.ARM_MAX_BEARING_OFF_DEG:.0f}°), 已經飛過或方向不對")
+        if d0 > cfg.ARM_MAX_DIST_M:
+            return (f"離目標起點 {d0:.0f} m (> {cfg.ARM_MAX_DIST_M:.0f} m), "
+                    f"不在 WP3 附近 / --start 打錯")
+        if s['compass_hdg'] is None:
+            return "沒有羅盤航向, 無法確認目標在機頭前方"
+        brg = math.degrees(math.atan2(-ae, -an)) % 360.0
+        off = abs((brg - s['compass_hdg'] + 180.0) % 360.0 - 180.0)
+        if off > cfg.ARM_MAX_BEARING_OFF_DEG:
+            return (f"目標起點不在機頭前方 (方位差 {off:.0f}° > "
+                    f"{cfg.ARM_MAX_BEARING_OFF_DEG:.0f}°), 已經飛過或方向不對")
         return None
 
     def do_arm(s, t):
-        # 切 GUIDED 時飛機離目標起點多遠: 實飛在 WP3 約 0.6 km;
-        # 太遠 = --start 打錯或在實驗室 (到不了推頭距離, 不會俯衝).
+        # 切 GUIDED 時飛機離目標起點多遠: 實飛在 WP3 約 0.6 km
         an, ae = gps_to_ned(s['lat'], s['lon'], o_lat, o_lon)
         d0 = math.hypot(an, ae)
         event(f"切 GUIDED 時離目標起點 {d0:.0f} m")
-        if d0 > 3000.0:
-            event(f"★ 離目標起點 {d0 / 1000:.1f} km (> 3 km) — 這趟不會進 PRE_DIVE; "
-                  f"實飛請檢查 --start / 是否在 WP3 才切 GUIDED")
+        if d0 > cfg.ARM_MAX_DIST_M:
+            event(f"★ 離目標起點 {d0 / 1000:.1f} km — 地面 / 掛機測試才會這樣; "
+                  f"實飛不可能 (空中會被拒絕啟動)")
         if moving:
             virt.target.t0 = t
             tn, te, _, _ = virt.target_now(t)
@@ -605,6 +618,7 @@ def main():
                     if sm.mode == sm.SEARCH and not sm.mission_armed:
                         _why = arm_check(s) if s['lat'] is not None else "沒有 GPS"
                         if _why is None:
+                            run_idx += 1
                             event(f"★ GUIDED 上升沿 — 種點 + ARM (第 {run_idx} 趟任務開始)")
                             do_arm(s, t)
                         else:
@@ -616,7 +630,8 @@ def main():
                 elif guided_prev and not s['guided']:
                     if sm.mission_armed or sm.mode != sm.SEARCH:
                         event(f"★ 離開 GUIDED (fc_mode={s['fc_mode']}) — "
-                              f"第 {run_idx} 趟結束 (mode={sm.mode})")
+                              f"第 {run_idx} 趟 mode={sm.mode} "
+                              f"(推頭後離開 = 任務結束; {cfg.REARM_OFF_S:.0f}s 內沒回來就重置)")
                 guided_prev = s['guided']
                 if s['guided']:
                     guided_off_t = None
@@ -629,13 +644,12 @@ def main():
                 if (guided_off_t is not None
                         and t - guided_off_t >= cfg.REARM_OFF_S
                         and (sm.mission_armed or sm.mode != sm.SEARCH)):
-                    if sm.mission_armed:
-                        run_idx += 1
                     sm = MissionStateMachine(gcfg, verbose=True)
                     mode_prev = sm.mode
                     scored['done'] = False
-                    event(f"任務重置 — 下次撥 GUIDED = 第 {run_idx} 趟 "
-                          f"(目標回到起點重新出發)")
+                    _miss_warned = False
+                    event(f"任務重置 — 下次撥 GUIDED = 第 {run_idx + 1} 趟 "
+                          f"(到時目標從起點重新出發)")
 
                 if flags['arm']:
                     flags['arm'] = False
@@ -644,7 +658,8 @@ def main():
                     elif s['guided'] and s['lat'] is not None:
                         _why = arm_check(s)
                         if _why is None:
-                            event("★ 鍵盤 'd' — 種點 + ARM")
+                            run_idx += 1
+                            event(f"★ 鍵盤 'd' — 種點 + ARM (第 {run_idx} 趟)")
                             do_arm(s, t)
                         else:
                             event(f"★★ 鍵盤 'd' — 不啟動任務: {_why}")

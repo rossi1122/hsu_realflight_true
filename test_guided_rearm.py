@@ -3,7 +3,7 @@
   t=0.2 還沒撥 GUIDED 就誤按 x              → ABORT, 1 s 後重置 (不算一趟)
   t=2   撥 GUIDED (WP3, 離 WP4 約 600 m)   → 第 1 趟開始
   t=15  DIVE 中切 FBWA                       → 第 1 趟結束 (DONE), 1 s 後重置
-  t=21  在目標正上方又撥 GUIDED              → 太近, 拒絕啟動
+  t=21  在目標附近 (高度也不夠) 又撥 GUIDED  → 拒絕啟動
   t=26  切出; t=41 飛機回到 WP3; t=42 撥 GUIDED → 第 2 趟從頭完整飛完
 用法: python3 test_guided_rearm.py   (最後印 PASS / FAIL)"""
 import sys, types, math, os, glob, csv
@@ -125,8 +125,8 @@ for r in rows:
 for k, t in seq: print(t, k)
 ev = open(f).read()
 ok = all(x in ev for x in ('任務重置 — 下次撥 GUIDED = 第 1 趟', '第 1 趟任務開始',
-                           '第 1 趟結束 (mode=DIVE)', '任務重置 — 下次撥 GUIDED = 第 2 趟',
-                           '不啟動任務: 離目標起點只有', '第 2 趟任務開始', 'MODE: PULLOUT → DONE'))
+                           '第 1 趟 mode=DIVE (推頭後離開', '任務重置 — 下次撥 GUIDED = 第 2 趟',
+                           '不啟動任務', '第 2 趟任務開始', 'MODE: PULLOUT → DONE'))
 ok = ok and [k for k, _ in seq][-1] == ('2', 'DONE', '1')
 for p in (f, c):
     os.remove(p)

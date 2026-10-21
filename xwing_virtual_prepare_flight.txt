@@ -103,7 +103,9 @@ Terminal 2 (到專案資料夾):
   [Bridge] PTCH_LIM_MIN_DEG=-45° OK
   [Bridge] GUIDED_P=5000.000 → 43002 航向控制可用
   [Bridge] 串流率設定完成 6/6
-  [xwing] AIRSPEED_MIN=25 / AIRSPEED_MAX=60 / AIRSPEED_CRUISE 30 ... OK
+  [xwing] AIRSPEED_MIN=25 m/s OK
+  [xwing] AIRSPEED_MAX=60 m/s OK
+  [xwing] AIRSPEED_CRUISE→巡航 30 m/s OK
   每秒: [SEARCH  ] ... g=0 | VIS link=1 ...          ← link=1 = 雲台資料有在收
   (X-wing 不會出現 GUIDED_TIMEOUT 那行, 正常)
 

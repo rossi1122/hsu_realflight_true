@@ -30,7 +30,7 @@
 
 開機要看到這幾行 (xwing_virtual 新增的檢查)：
 ```
-[Bridge] PTCH_LIM_MIN_DEG=-40° OK (需求 -40°)
+[Bridge] PTCH_LIM_MIN_DEG=-45° OK (需求 -40°)
 [xwing] AIRSPEED_MIN=20 m/s OK
 [xwing] AIRSPEED_MAX=60 m/s OK
 [xwing] AIRSPEED_CRUISE→巡航 30 m/s OK

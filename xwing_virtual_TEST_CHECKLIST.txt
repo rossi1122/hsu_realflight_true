@@ -112,7 +112,7 @@ Terminal 1 的 MAVROS 保持開著, Terminal 2:
             --no-vision --case bench_F1 2>&1 | tee console_bench_F1.txt
 
 開機訊息要看到:
-  [ ] PTCH_LIM_MIN_DEG=-40° OK
+  [ ] PTCH_LIM_MIN_DEG=-45° OK (需求 -40°)
   [ ] AIRSPEED_MAX=60 m/s OK
   [ ] GUIDED_P=5000 → 43002 航向控制可用
   [ ] 串流率設定完成 6/6

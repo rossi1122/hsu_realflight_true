@@ -125,7 +125,7 @@ python3 xwing_virtual_flight.py --static --dive-hold-heading
 [xwing] 移動目標: 起點 (23.7217999, 120.3798795) 方位 180.0° 速度 10.0 m/s ...
 [xwing] 巡航 240 m / 30 m/s, 俯衝 30° → 120 m 拉平, 速度上限 60 m/s
 [xwing] 推頭門檻: 到目標水平距 ≤ 416 m (純幾何 416 m)
-[Bridge] PTCH_LIM_MIN_DEG=-40° OK (需求 -40°)
+[Bridge] PTCH_LIM_MIN_DEG=-45° OK (需求 -40°)
 [Bridge] GUIDED_P=... → 43002 航向控制可用 (SEARCH 走 bank turn)
 [Bridge] GUIDED_TIMEOUT=0.5s OK         ← X-wing 沒有這個參數，不會出現這行 (正常)
 [Bridge] 方向舵迴路 ON — 限幅 ±30.0°, ...

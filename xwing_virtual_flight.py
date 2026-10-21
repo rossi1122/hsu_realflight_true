@@ -602,7 +602,6 @@ def main():
                 s = io.snapshot()
 
                 if s['guided'] and not guided_prev:
-                    guided_off_t = None
                     if sm.mode == sm.SEARCH and not sm.mission_armed:
                         _why = arm_check(s) if s['lat'] is not None else "沒有 GPS"
                         if _why is None:
@@ -615,22 +614,26 @@ def main():
                         event(f"GUIDED 上升沿 — 離開不到 {cfg.REARM_OFF_S:.1f}s, "
                               f"沿用第 {run_idx} 趟 (mode={sm.mode})")
                 elif guided_prev and not s['guided']:
-                    guided_off_t = t
                     if sm.mission_armed or sm.mode != sm.SEARCH:
                         event(f"★ 離開 GUIDED (fc_mode={s['fc_mode']}) — "
                               f"第 {run_idx} 趟結束 (mode={sm.mode})")
                 guided_prev = s['guided']
+                if s['guided']:
+                    guided_off_t = None
+                elif guided_off_t is None:
+                    guided_off_t = t
 
-                # ── 離開 GUIDED 超過 REARM_OFF_S → 重置, 下次撥 GUIDED = 新的一趟 ──
+                # ── 不在 GUIDED 超過 REARM_OFF_S 且任務不是「待命」→ 重置,
+                #    下次撥 GUIDED = 新的一趟. 也涵蓋 AUTO 中誤按 x (ABORT/DONE).
                 #   (短暫跳動不重置: 狀態機自己已把 PRE_DIVE/DIVE/PULLOUT 結束成 DONE)
                 if (guided_off_t is not None
                         and t - guided_off_t >= cfg.REARM_OFF_S
                         and (sm.mission_armed or sm.mode != sm.SEARCH)):
-                    guided_off_t = None
+                    if sm.mission_armed:
+                        run_idx += 1
                     sm = MissionStateMachine(gcfg, verbose=True)
                     mode_prev = sm.mode
                     scored['done'] = False
-                    run_idx += 1
                     event(f"任務重置 — 下次撥 GUIDED = 第 {run_idx} 趟 "
                           f"(目標回到起點重新出發)")
 

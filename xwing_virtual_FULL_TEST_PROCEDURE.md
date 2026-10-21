@@ -344,7 +344,7 @@ python3 xwing_virtual_flight.py --moving --case flight1                       # 
 [xwing] 推頭門檻: 到目標水平距 ≤ 416 m (純幾何 416 m)
 [xwing] 雲台視覺 UART: ... (資料只記錄); 模式鍵 ON
 [UARTVision] 已開啟 ... @ 115200 8N1
-[Bridge] PTCH_LIM_MIN_DEG=-40° OK
+[Bridge] PTCH_LIM_MIN_DEG=-45° OK (需求 -40°)
 [Bridge] GUIDED_P=5000.000 → 43002 航向控制可用
 [Bridge] 串流率設定完成 6/6
 [Bridge] 方向舵迴路 ON — ...

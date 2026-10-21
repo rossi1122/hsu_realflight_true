@@ -61,6 +61,7 @@
 | `xwing_virtual_FULL_TEST_PROCEDURE.md` | (新) | ★ X-wing 完整測試流程：出發前準備 → 雲台 / 飛機地面測試 → 飛行 → 飛行後 |
 | `xwing_virtual_TEST_CHECKLIST.txt` | (新) | 測試總清單 (照順序打勾)；10/17 已完成第 1–6 項 |
 | `xwing_virtual_TEST_REPORT_20261017.md` | (新) | ★ 2026/10/17 X-wing 地面測試報告 (參數、方向舵 A/B/E、整機掛機) |
+| `xwing_virtual_FLIGHT_DAY_QUICK.txt` | (新) | ★ 實飛指令最精簡版 (一頁，當天照抄) |
 | `xwing_virtual_FLIGHT_DAY_COMMANDS.txt` | (新) | ★ 實飛當天所有指令 (照順序，可直接複製) |
 | `xwing_virtual_TEST_REPORT_20261020.md` | (新) | ★ 2026/10/20 雲台整合地面測試報告 (模式鍵、鎖定時間、資料鏈) |
 | `test_records/20261017_xwing/` | (資料) | 10/17 原始資料：參數檔、方向舵測試 CSV、掛機與實飛指令 log |

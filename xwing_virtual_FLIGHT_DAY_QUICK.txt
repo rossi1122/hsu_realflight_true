@@ -1,0 +1,22 @@
+X-wing 實飛指令 (最精簡版)      詳細: xwing_virtual_FLIGHT_DAY_COMMANDS.txt
+
+【Terminal 1】 MAVROS, 整天開著
+roslaunch mavros apm.launch
+
+【Terminal 2】 飛控不能在 GUIDED 時才開
+cd ~/catkin_ws/src/hsu_realflight_true
+
+第一趟 (版本 B):
+python3 xwing_virtual_flight.py --moving --dive-hold-heading --case flight1_B 2>&1 | tee console_flight1_B.txt
+
+第二趟 (版本 A):
+python3 xwing_virtual_flight.py --moving --case flight2_A 2>&1 | tee console_flight2_A.txt
+
+沒有雲台: 指令裡加 --no-vision
+
+【飛行中 Terminal 2】  x + Enter = 中止    q + Enter = 結束 (換趟 / 落地後)
+                      最快中止: 飛手撥 FBWA
+
+【落地後】
+python3 xwing_gimbal_mode_test.py   → 按 s → 按 q    (雲台回追蹤)
+log: flight_logs/  +  console_*.txt  +  飛控 .BIN

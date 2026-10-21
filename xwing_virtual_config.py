@@ -207,8 +207,9 @@ class XwingVirtualConfig:
     ARM_MIN_MARGIN_M = 100.0    # 離起點至少 = 推頭距離 + 此值 (416 + 100 = 516 m; WP3 = 613 m)
                                 #   追擊接近率 20 m/s → SEARCH 至少約 5 s
     ARM_MAX_DIST_M = 1500.0     # 離起點超過此值 → 不啟動 (不在 WP3 附近 / --start 打錯)
-    ARM_MAX_BEARING_OFF_DEG = 30.0  # 起點偏離機頭超過此角度 → 不啟動 (已飛過 / 方向錯)
-                                #   PRE_DIVE 不修橫向, 偏太多俯衝會偏 / 觸發 TARGET_DRIFT
+    ARM_MAX_BEARING_OFF_DEG = 45.0  # 起點偏離機頭超過此角度 → 不啟動 (已飛過 / 方向錯)
+                                #   PRE_DIVE 不修橫向. 模擬: 在 WP3 (613 m) 偏 45° 仍能對準 (側偏 ~10 m);
+                                #   切太晚 (~520 m) 偏 45° → 推頭時還差 ~8°, 側偏 ~58 m
     ARM_GROUND_AGL_M = 20.0     # AGL 低於此 = 在地面 (實驗室測試), 不檢查上面各項
 
     # ════════════════════════════════════════════════════════════

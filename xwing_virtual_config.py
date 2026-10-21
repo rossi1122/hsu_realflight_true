@@ -5,7 +5,7 @@ xwing_virtual_config.py — xwing_virtual 版全部參數 (純虛擬軌跡, 無�
 任務: AUTO 繞圈對準 → 撥 GUIDED 開始 → SEARCH(朝虛擬目標直飛)
       → PRE_DIVE(推頭到 -30°) → 30° DIVE(虛擬目標投影 PID)
       → PULLOUT(120 m 拉平) → TECS 120 m 平飛
-感知: ★ 無相機 / 無 YOLO / 無雲台 / 無 DKF.
+感知: ★ 控制不用相機 / YOLO / DKF. 對方雲台經 UART 只「記錄 + 送模式鍵」, 不進控制.
       目標 = 已知 GPS 起點 + 方位 + 車速 的虛擬軌跡, 每拍用飛機真實狀態
       投影成「虛擬畫面」(u, v) 餵給 DIVE 段 PID (dive_guidance 原封不動).
 機體: X-wing 固定翼 (巡航 30 m/s, 速度上限 60 m/s)
@@ -170,8 +170,7 @@ class XwingVirtualConfig:
     VISION_UART_ENABLED = True       # 預設開; 沒接雲台時用 --no-vision 關閉
     # 2026/10/20 實測: 雲台 USB-UART = CP2102 (by-id 固定名稱, 不受 ttyUSB 編號影響)
     VISION_UART_PORT = '/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0'
-    #   ⚠ 建議改成固定名稱 /dev/serial/by-id/usb-...,
-    #     ttyUSB0/1 的編號開機時可能互換 (尤其飛控也走 USB 時).
+    #   兩台相機的 USB-UART 都是這個名稱 (10/20 確認). 臨時改用: --vision-port /dev/ttyUSB0
     VISION_UART_BAUD = 115200        # 必須與對方發送端相同
     VISION_STALE_S = 2.0             # 超過這麼久沒收到有效封包 → 告警
 

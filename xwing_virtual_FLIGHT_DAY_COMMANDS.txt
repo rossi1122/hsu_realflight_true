@@ -1,0 +1,127 @@
+==================================================================
+ X-wing 實飛當天會用到的所有指令 (照順序)
+ 更新: 2026/10/21   權限已設定好 (dialout), 不用再 chmod
+ 完整流程與判讀: xwing_virtual_prepare_flight.txt
+==================================================================
+
+所有指令都在 Orin NX 上打.
+專案資料夾: 用第 0 節 git clone 之後是
+    ~/catkin_ws/src/hsu_realflight_true
+(還在用舊的 ZIP 資料夾 hsu_realflight_true-claude-kind-clarke-r77kuq 的話, 下面 cd 換成那個)
+
+
+------------------------------------------------------------------
+ 0. 出發前 (在實驗室, 有網路時)
+------------------------------------------------------------------
+# 拿最新版程式 (資料夾是 ZIP 下載的, 不能 git pull, 用 clone):
+cd ~/catkin_ws/src
+git clone -b claude/kind-clarke-r77kuq https://github.com/rossi1122/hsu_realflight_true.git
+
+# 確認拿到的是新版 (有這行就對):
+grep -n "切 GUIDED 時離目標起點" hsu_realflight_true/xwing_virtual_flight.py
+
+
+------------------------------------------------------------------
+ 1. 到場地開機後: 確認硬體 (Terminal 1)
+------------------------------------------------------------------
+ls -l /dev/ttyACM0                    # 飛控 (USB)
+ls -l /dev/serial/by-id/              # 要看到 usb-Silicon_Labs_CP2102... -> ../../ttyUSB0 (雲台)
+
+# 看不到 CP2102 → 雲台 USB-UART 沒插好, 重插再 ls 一次
+
+
+------------------------------------------------------------------
+ 2. (選做) 雲台單獨測試 — 確認對方雲台有在送資料
+------------------------------------------------------------------
+cd ~/catkin_ws/src/hsu_realflight_true
+python3 xwing_gimbal_mode_test.py
+
+    按 s → 雲台轉到約 -20° (追蹤)
+    按 p → 雲台轉到 -30° (鎖定), 0.5~1 s 內到位
+    按 s → 回追蹤
+    按 q → 結束        ★ 一定要按 q 關掉, 不然實飛程式打不開串口
+
+
+------------------------------------------------------------------
+ 3. 開 MAVROS (Terminal 1, 整天開著不要關)
+------------------------------------------------------------------
+roslaunch mavros apm.launch
+
+    要看到: CON: Got HEARTBEAT, connected. FCU: ArduPlane ...
+
+
+------------------------------------------------------------------
+ 4. 開實飛程式 (Terminal 2, 起飛前就開好)
+------------------------------------------------------------------
+★ 開之前: 飛控【不能】在 GUIDED (要在 AUTO / FBWA / MANUAL)
+
+cd ~/catkin_ws/src/hsu_realflight_true
+
+# 第一趟 — 版本 B (DIVE 不打方向舵):
+python3 xwing_virtual_flight.py --moving --dive-hold-heading --case flight1_B 2>&1 | tee console_flight1_B.txt
+
+# 第二趟 — 版本 A (DIVE 用方向舵 PID):
+python3 xwing_virtual_flight.py --moving --case flight2_A 2>&1 | tee console_flight2_A.txt
+
+# 當天雲台壞掉 / 沒接: 在 --case 前面加 --no-vision
+python3 xwing_virtual_flight.py --moving --dive-hold-heading --no-vision --case flight1_B 2>&1 | tee console_flight1_B.txt
+
+★ 實飛【不要】加: --bench  --bench-dive  --ground-test  --start  --tgt-heading
+
+開好要看到 (詳見 prepare_flight.txt F 節):
+    DIVE 方向舵: 版本 B (...)          ← 第二趟要是「版本 A」
+    目標=移動 起點 (23.7217999, 120.3798795) 方位 180.0°
+    [UARTVision] 已開啟 /dev/serial/by-id/usb-Silicon_Labs_CP2102...
+    [Bridge] 串流率設定完成 6/6
+    每秒一行 [SEARCH ] ... VIS link=1
+出現 ★★★ → 不要飛
+
+
+------------------------------------------------------------------
+ 5. 飛行中: Terminal 2 可以打的鍵 (打完按 Enter)
+------------------------------------------------------------------
+x    中止: 拉起 2.5 s 後放手給飛控     (飛手撥 FBWA 比這個快, 優先用遙控器)
+q    結束程式 (存好 log)
+d    手動 ARM — 實飛不用, GUIDED 上升沿會自動開始
+
+切 GUIDED 後要看到:
+    切 GUIDED 時離目標起點 約 600 m      ← 出現「> 3 km」= 切錯地方
+    SEARCH → PRE_DIVE → DIVE → PULLOUT → DONE
+
+
+------------------------------------------------------------------
+ 6. 換下一趟 (飛機在 AUTO 繞圈時)
+------------------------------------------------------------------
+Terminal 2: 輸入 q 按 Enter
+然後打第二趟的指令 (第 4 節 版本 A), 看完開機訊息, 下一圈到 WP3 再切 GUIDED
+
+
+------------------------------------------------------------------
+ 7. 落地後
+------------------------------------------------------------------
+# Terminal 2: 輸入 q 按 Enter (如果還沒結束)
+
+# 雲台還停在鎖定 → 讓它回追蹤:
+python3 xwing_gimbal_mode_test.py      →  按 s  →  按 q
+
+# 找 log (傳給 Claude 分析):
+ls -lt flight_logs/ | head
+    flight_logs/xwing_virtual_<時間>_flight1_B.csv
+    flight_logs/xwing_virtual_<時間>_flight1_B_events.txt
+    flight_logs/xwing_virtual_<時間>_flight2_A.csv
+    flight_logs/xwing_virtual_<時間>_flight2_A_events.txt
+    console_flight1_B.txt / console_flight2_A.txt     (專案資料夾)
+另外: 飛控 .BIN (Mission Planner → DataFlash Logs)、對方的雲台 log
+
+# 關 MAVROS: Terminal 1 按 Ctrl+C
+
+
+------------------------------------------------------------------
+ 出問題時
+------------------------------------------------------------------
+could not open port / No such file   → ls -l /dev/serial/by-id/ 看雲台有沒有插上
+                                        (或加 --vision-port /dev/ttyUSB0 試)
+串口被占用 (Device or resource busy)  → xwing_gimbal_mode_test.py 或 uart_mipi_receiver.py
+                                        沒關, 回去按 q / Ctrl+C
+MAVROS 連不上                         → 拔插飛控 USB, ls -l /dev/ttyACM0, 重開 Terminal 1
+雲台不能用但飛機正常                  → 加 --no-vision 照飛 (視覺只記錄, 不影響控制)

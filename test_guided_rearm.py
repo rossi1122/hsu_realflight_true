@@ -111,7 +111,7 @@ def step2():
         AC['n'] = 613.0
 Rate.sleep = lambda self: step2()
 
-sys.argv = ['x', '--moving', '--dive-hold-heading', '--no-vision', '--case', 'rearm_test']
+sys.argv = ['x', '--moving', '--no-vision', '--case', 'rearm_test']
 F.main()
 
 f = sorted(glob.glob(os.path.join(REPO, 'flight_logs', '*rearm_test_events.txt')))[-1]

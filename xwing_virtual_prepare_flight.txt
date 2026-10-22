@@ -29,7 +29,7 @@
       (Orin NX 上只能插一個 CP2102; 飛控是 ttyACM0 不受影響)
   [v] 虛擬目標起點 = 任務規劃 WP4 (23.7217999, 120.3798795), 往南 10 m/s
   [v] 飛控: PTCH_LIM_MIN_DEG -45, AIRSPEED_MAX 60, GUIDED 由地面站切
-  [v] 方向舵: Test A / B / E 通過, 正舵量 = 右偏航 (版本 A 可用)
+  [v] 方向舵: Test A / B / E 通過, 正舵量 = 右偏航 → DIVE 一律用方向舵 PID
 
 
 ==================================================================
@@ -78,15 +78,11 @@ Terminal 1:
 Terminal 2 (到專案資料夾):
     cd ~/catkin_ws/src/hsu_realflight_true-claude-kind-clarke-r77kuq   (換成你的路徑)
 
-  第一趟 — 版本 B (DIVE 不打方向舵):
-    python3 xwing_virtual_flight.py --moving --dive-hold-heading --case flight1_B \
-            2>&1 | tee console_flight1_B.txt
+  實飛 (DIVE 一律用方向舵 PID 控制, 參數與原版 config.py 相同):
+    python3 xwing_virtual_flight.py --moving --case flight1 \
+            2>&1 | tee console_flight1.txt
 
-  第二趟 — 版本 A (DIVE 用方向舵 PID):
-    python3 xwing_virtual_flight.py --moving --case flight2_A \
-            2>&1 | tee console_flight2_A.txt
-
-  ★ --case 照抄上面 (flight1_B / flight2_A), log 檔名就看得出版本
+  ★ 一次開程式可以飛很多趟 (每次切 GUIDED = 一趟); 程式中途重開才換 --case 名字 (flight2 ...)
   當天沒接雲台: 指令後面加 --no-vision
   ★ 實飛【不要】加: --bench  --bench-dive  --ground-test  --start  --tgt-heading
 
@@ -97,7 +93,7 @@ Terminal 2 (到專案資料夾):
 要看到:
   [xwing] 移動目標: 起點 (23.7217999, 120.3798795) 方位 180.0° 速度 10.0 m/s ...
   [xwing] 推頭門檻: 到目標水平距 ≤ 416 m
-  DIVE 方向舵: 版本 B (--dive-hold-heading, 不打方向舵)   ← 第二趟要是「版本 A」
+  DIVE 方向舵: 方向舵 PID (版本 A); 空速排程 RUDDER_VSCHED=((999.0, 1.0),)
   [xwing] 雲台視覺 UART: /dev/serial/by-id/usb-Silicon_Labs_CP2102... (資料只記錄); 模式鍵 ON
   [UARTVision] 已開啟 /dev/serial/by-id/usb-Silicon_Labs_CP2102... @ 115200 8N1
   [Bridge] PTCH_LIM_MIN_DEG=-45° OK
@@ -145,10 +141,8 @@ Terminal 2 (到專案資料夾):
 5) 看到 PULLOUT → DONE → 地面站切回 AUTO (爬回 240 m)
 
 6) 要再飛一趟:
-   同一個版本 → 不用重開程式, 下一圈到 WP3 再切 GUIDED 就是新的一趟
-                (目標重新從 WP4 出發; log 的 run 欄位 = 第幾趟)
-   換版本 (B → A) → 在 AUTO 繞圈時 Terminal 2 輸入 q → 打版本 A 的指令重開 →
-                看開機訊息 → 下一圈到 WP3 再切 GUIDED
+   不用重開程式, 下一圈到 WP3 再切 GUIDED 就是新的一趟
+   (目標重新從 WP4 出發; log 的 run 欄位 = 第幾趟)
 
 ★ 切換規則 (程式自動處理):
    · 任何時候都可以切出 GUIDED, 飛控立刻不聽程式的

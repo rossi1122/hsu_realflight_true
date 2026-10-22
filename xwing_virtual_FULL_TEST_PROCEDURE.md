@@ -43,8 +43,8 @@
 | 飛控參數 (`PTCH_LIM_MIN_DEG`、`AIRSPEED_MAX`)、地面站切得到 GUIDED | **不飛** |
 | 方向舵 Test A (yaw 欄位 = 方向舵、送 180 = 歸中) | **不飛** (PRE_DIVE 靠它把方向舵歸中，版本 A、B 都會用到) |
 | 整機掛機 F1：PRE_DIVE 時兩片 V 尾有差動 | **不飛** |
-| 方向舵 Test B 正負號不對、或 Test E 剩 < 50% | 可以飛，但只能用**版本 B** (`--dive-hold-heading`) |
-| 方向舵還沒測 B / E | 可以飛，只能用**版本 B** |
+| 方向舵 Test B 正負號不對、或 Test E 剩 < 50% | **不飛** (DIVE 一律用方向舵；版本 B 已於 10/22 移除) |
+| 方向舵還沒測 B / E | **不飛** |
 | 雲台測試 (C / D / E) 不通過 | **可以飛**：控制只用虛擬目標，雲台資料只記錄。只是這趟的雲台資料不能用 |
 | 開機時 `VIS link=0` | **可以飛**：不影響控制，只是收不到雲台資料、鎖定鍵送不出去 |
 
@@ -240,7 +240,7 @@ python3 test_rudder_bench.py --test E --rudder-ch 3 --elevator-ch 2
 | 測試 | 通過 | 結果 |
 |---|---|---|
 | **A** | `→ 假設【成立】` | □ 成立　□ 不動　□ 形狀不一致 → **不飛** |
-| **B** | 正舵量時機頭往**右**偏 (右片後緣下、左片後緣上)；副翼不跟著動 | □ 對 → 可用版本 A　□ 反 → 只用版本 B |
+| **B** | 正舵量時機頭往**右**偏 (右片後緣下、左片後緣上)；副翼不跟著動 | □ 對 → 可以飛　□ 反 → 不能飛 |
 | **E** | 俯衝時方向舵權限剩 ≥ 85% (先照 `RUDDER_BENCH.md` 7.1 節確認結果有效) | ___% |
 
 測完把飛控切回 **MANUAL**。
@@ -328,8 +328,7 @@ python3 xwing_gimbal_mode_test.py      # 按 p → 雲台往下轉、[LOCKED] �
 roslaunch mavros apm.launch
 
 # Terminal 2 (二選一)
-python3 xwing_virtual_flight.py --moving --dive-hold-heading --case flight1   # 版本 B
-python3 xwing_virtual_flight.py --moving --case flight1                       # 版本 A (10/17 掛機通過，建議第二趟)
+python3 xwing_virtual_flight.py --moving --case flight1   # DIVE 一律用方向舵 PID (版本 B 已移除)
 ```
 
 > ⚠ **開程式前飛控要在 AUTO / FBWA / MANUAL，不能在 GUIDED。** 程式啟動時如果飛控已在 GUIDED，
@@ -474,7 +473,7 @@ SEARCH 航向收斂、俯衝角、拉平高度、miss distance，以及雲台資
 | 2-4 | 地面站切得到 GUIDED、開關撥 FBWA 能離開 | □ |
 | 2-5 | R = __ E = __ A = __ | |
 | 2-6 | Test A 成立 | □ (不成立不飛) |
-| 2-6 | Test B 正負號 | □ 對 (版本 A 可用)　□ 反 |
+| 2-6 | Test B 正負號 | □ 對　□ 反 (不能飛) |
 | 2-6 | Test E 權限 ____% | |
 | 2-7 | F1：PRE_DIVE V 尾無差動 | □ (有差動不飛) |
 | 2-7 | F1：雲台自動鎖定 ____ s | □ |

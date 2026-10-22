@@ -33,7 +33,6 @@ xwing_virtual_flight.py — xwing_virtual 實飛主程式 (純虛擬軌跡, 無�
   python3 xwing_virtual_flight.py                 # 移動目標 (預設)
   python3 xwing_virtual_flight.py --static        # 靜止目標 (停在起點)
   python3 xwing_virtual_flight.py --bench         # 掛機: 忽略 AGL 進入條件
-  python3 xwing_virtual_flight.py --dive-hold-heading   # 版本 B
   python3 xwing_virtual_flight.py --vision-port /dev/ttyUSB0   # 指定雲台 UART 串口
   python3 xwing_virtual_flight.py --no-vision           # 沒接雲台 (不開 UART)
   python3 xwing_virtual_flight.py --no-gimbal-cmd       # 收雲台資料, 但不送模式鍵
@@ -352,8 +351,6 @@ def main():
                     help='掛機: 跳過 pitch 容差直接交棒 DIVE (驗狀態機用)')
     ap.add_argument('--ground-test', action='store_true',
                     help='地面測試: SEARCH 保持機頭不朝目標')
-    ap.add_argument('--dive-hold-heading', action='store_true',
-                    help='版本 B: DIVE 不修 yaw, 凍結進 DIVE 那刻的航向')
     ap.add_argument('--case', type=str, default=None,
                     help='自訂 case 標籤加進檔名')
     ap.add_argument('--vision-uart', action='store_true',
@@ -409,7 +406,7 @@ def main():
     gcfg = build_gcfg(cfg, moving, predive_dist,
                       bench=args.bench, bench_pitch=args.bench_pitch,
                       bench_dive=args.bench_dive, ground_test=args.ground_test,
-                      dive_hold_heading=args.dive_hold_heading)
+                      dive_hold_heading=False)   # DIVE 一律用方向舵 PID (版本 A)
     sm = MissionStateMachine(gcfg, verbose=True)
 
     bcfg = apply_bridge_cfg(AttitudeBridgeConfig(), cfg)
@@ -464,7 +461,7 @@ def main():
         tag = ''.join(c if (c.isalnum() or c in '-_') else '_' for c in args.case)
     else:
         tag = ('moving' if moving else 'static') + \
-              ('_B_yawhold' if args.dive_hold_heading else '_A_yawpid')
+              '_A_yawpid'
     stem = f'xwing_virtual_{stamp}_{tag}'
     csv_path = os.path.join(log_dir, f'{stem}.csv')
     ev_path = os.path.join(log_dir, f'{stem}_events.txt')
@@ -490,8 +487,7 @@ def main():
     event(f"xwing_virtual: 巡航 {cfg.CRUISE_AGL_M:.0f}m/{cfg.V_CRUISE_MPS:.0f}m/s "
           f"俯衝 {cfg.DIVE_ANGLE_DEG:.0f}° 拉平 {cfg.PULLOUT_AGL_M:.0f}m "
           f"Vmax {cfg.PULLOUT_VMAX_MPS:.0f}m/s 推頭 {predive_dist:.0f}m")
-    event("DIVE 方向舵: " + ("版本 B (--dive-hold-heading, 不打方向舵)"
-                             if args.dive_hold_heading else "版本 A (方向舵 PID)"))
+    event(f"DIVE 方向舵: 方向舵 PID (版本 A); 空速排程 RUDDER_VSCHED={cfg.RUDDER_VSCHED}")
     event(f"目標={'移動' if moving else '靜止'} 起點 {start_gps} "
           f"方位 {heading:.1f}° 速度 {speed} m/s  前置瞄準 "
           f"{'ON' if gcfg.DIVE_TARGET_LEAD else 'OFF'}  (控制: 虛擬軌跡)")

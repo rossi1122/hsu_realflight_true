@@ -126,7 +126,7 @@ python3 test_rudder_bench.py --test E --rudder-ch R --elevator-ch E    # V 尾: 
 python3 test_rudder_bench.py --test C --rudder-ch R --aileron-ch A --elevator-ch E
 
 測完 → 飛控切回 MANUAL / FBWA
-沒通過或還沒測 → 實飛一律加 --dive-hold-heading
+沒通過或還沒測 → 不能飛 (DIVE 一律用方向舵, 版本 B 已移除)
 
 
 ------------------------------------------------------------------

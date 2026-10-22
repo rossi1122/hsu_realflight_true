@@ -57,19 +57,18 @@ roslaunch mavros apm.launch
 
 cd ~/catkin_ws/src/hsu_realflight_true
 
-# 第一趟 — 版本 B (DIVE 不打方向舵):
-python3 xwing_virtual_flight.py --moving --dive-hold-heading --case flight1_B 2>&1 | tee console_flight1_B.txt
-
-# 第二趟 — 版本 A (DIVE 用方向舵 PID):
-python3 xwing_virtual_flight.py --moving --case flight2_A 2>&1 | tee console_flight2_A.txt
+# 實飛 (DIVE 一律用方向舵 PID 控制, 參數與原版 config.py 相同):
+python3 xwing_virtual_flight.py --moving --case flight1 2>&1 | tee console_flight1.txt
 
 # 當天雲台壞掉 / 沒接: 在 --case 前面加 --no-vision
-python3 xwing_virtual_flight.py --moving --dive-hold-heading --no-vision --case flight1_B 2>&1 | tee console_flight1_B.txt
+python3 xwing_virtual_flight.py --moving --no-vision --case flight1 2>&1 | tee console_flight1.txt
+
+# 程式中途結束要重開: --case 換一個名字 (flight2, flight3 ...), 避免看不出是哪一次
 
 ★ 實飛【不要】加: --bench  --bench-dive  --ground-test  --start  --tgt-heading
 
 開好要看到 (詳見 prepare_flight.txt F 節):
-    DIVE 方向舵: 版本 B (...)          ← 第二趟要是「版本 A」
+    DIVE 方向舵: 方向舵 PID (版本 A); 空速排程 RUDDER_VSCHED=((999.0, 1.0),)
     目標=移動 起點 (23.7217999, 120.3798795) 方位 180.0°
     [UARTVision] 已開啟 /dev/serial/by-id/usb-Silicon_Labs_CP2102...
     [Bridge] 串流率設定完成 6/6
@@ -92,10 +91,8 @@ d    手動 ARM — 實飛不用, GUIDED 上升沿會自動開始
 ------------------------------------------------------------------
  6. 換下一趟 (飛機在 AUTO 繞圈時)
 ------------------------------------------------------------------
-同一個版本再飛 / 中止後重飛: 不用動 Terminal 2, 下一圈到 WP3 再切 GUIDED
+再飛 / 中止後重飛: 不用動 Terminal 2, 下一圈到 WP3 再切 GUIDED
     (切出 GUIDED 1 s 後會出現「任務重置 — 下次撥 GUIDED = 第 N 趟」)
-換版本 (B → A): Terminal 2 輸入 q 按 Enter, 打第 4 節版本 A 的指令,
-    看完開機訊息, 下一圈到 WP3 再切 GUIDED
 看到「不啟動任務: 原因」(高度 < 200 m / 離 WP4 不在 516~1500 m / WP4 不在機頭前方 45° 內)
     → 切回 AUTO, 下一圈到 WP3 再切
 
@@ -110,11 +107,9 @@ python3 xwing_gimbal_mode_test.py      →  按 s  →  按 q
 
 # 找 log (傳給 Claude 分析):
 ls -lt flight_logs/ | head
-    flight_logs/xwing_virtual_<時間>_flight1_B.csv
-    flight_logs/xwing_virtual_<時間>_flight1_B_events.txt
-    flight_logs/xwing_virtual_<時間>_flight2_A.csv
-    flight_logs/xwing_virtual_<時間>_flight2_A_events.txt
-    console_flight1_B.txt / console_flight2_A.txt     (專案資料夾)
+    flight_logs/xwing_virtual_<時間>_flight1.csv          (CSV 的 run 欄位 = 第幾趟)
+    flight_logs/xwing_virtual_<時間>_flight1_events.txt
+    console_flight1.txt                                   (專案資料夾)
 另外: 飛控 .BIN (Mission Planner → DataFlash Logs)、對方的雲台 log
 
 # 關 MAVROS: Terminal 1 按 Ctrl+C

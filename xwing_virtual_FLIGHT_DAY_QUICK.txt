@@ -6,17 +6,14 @@ roslaunch mavros apm.launch
 【Terminal 2】 飛控不能在 GUIDED 時才開
 cd ~/catkin_ws/src/hsu_realflight_true
 
-第一趟 (版本 B):
-python3 xwing_virtual_flight.py --moving --dive-hold-heading --case flight1_B 2>&1 | tee console_flight1_B.txt
-
-第二趟 (版本 A):
-python3 xwing_virtual_flight.py --moving --case flight2_A 2>&1 | tee console_flight2_A.txt
+實飛 (DIVE 一律用方向舵控制):
+python3 xwing_virtual_flight.py --moving --case flight1 2>&1 | tee console_flight1.txt
 
 沒有雲台: 指令裡加 --no-vision
 
-【飛行中 Terminal 2】  x + Enter = 中止    q + Enter = 結束 (換版本 / 落地後)
+【飛行中 Terminal 2】  x + Enter = 中止    q + Enter = 結束 (落地後)
                       最快中止: 飛手撥 FBWA
-【重飛】 同版本不用重開: 切出 GUIDED → 下一圈到 WP3 再切 GUIDED = 新的一趟
+【重飛】 不用重開程式: 切出 GUIDED → 下一圈到 WP3 再切 GUIDED = 新的一趟
         出現「不啟動任務」= 位置/高度/方向不對 → 切回 AUTO, 下一圈到 WP3 再切
 
 【落地後】

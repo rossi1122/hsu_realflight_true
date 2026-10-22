@@ -12,7 +12,7 @@
 > | 雲台介面 / 地面測試細節 | `xwing_virtual_GIMBAL_UART.md`、`xwing_virtual_GIMBAL_GROUND_TEST.md` |
 >
 > 目前狀態：X-wing 參數、方向舵、整機掛機、雲台整合都通過。目標起點 = 任務規劃 WP4，WP3 切 GUIDED。
-> 實飛只要 `python3 xwing_virtual_flight.py --moving --dive-hold-heading` (版本 B) 或 `--moving` (版本 A)。
+> 實飛只要 `python3 xwing_virtual_flight.py --moving --case flight1`。DIVE 一律用方向舵 PID 控制 (版本 A)，`--dive-hold-heading` (版本 B) 已移除 (2026/10/22)。
 
 這一版從原本的 vision_dive (`run_vision_flight.py`) 改出來，條件如下：
 
@@ -123,7 +123,7 @@ xwing_virtual 直接 import 這四個檔，只用參數覆寫，不改程式碼�
 | `ABORT_MIN_AGL_M` | 55 | **100** | 拉平高度上移，安全底線跟著上移 |
 | `ENTRY_MIN_AGL_M` | 60 (寫死在主程式) | **200** (移到 config) | 240 m 進場時，若低於 200 m 代表幾何已經不對，不准推頭 |
 | `ALPHA_NOM_DEG` | 3.5 | **1.6** | 升力 ∝ V²，3.5 × (20/30)² ≈ 1.6。SEARCH 的 pitch 交給 TECS，這個值只會進 log |
-| `RUDDER_VSCHED` | `((999, 1.0),)` 不排程 | **`((30,1.0),(40,0.56),(50,0.36),(999,0.25))`** | 俯衝峰值從 ~36 m/s 升到 ~47–55 m/s，動壓變成 2.8–4 倍，方向舵權限按 (30/V)² 縮 |
+| `RUDDER_VSCHED` | `((999, 1.0),)` 不排程 | `((999, 1.0),)` **與原版相同** | 2026/10/22 與老師討論後改回原值 (曾改成依 (30/V)² 縮小權限)。方向舵其餘增益也全部與原版相同 |
 | `MOVING_START_GPS` | (22.913647, 120.312259) | **(23.7217999, 120.3798795)** | 新場地，任務規劃 WP4 (10/19) |
 | `MOVING_HEADING_GPS` | (22.9149299, 120.3121517) | **(23.7206860, 120.3798795)** | 起點正南 124 m (方位 180°) |
 | `TARGET_GPS` (靜止) | (22.913677, 120.312260) | **= 目標起點** | 新場地 |
@@ -166,7 +166,7 @@ roll 保護、虛擬相機內參 (1x)、`TARGET_SPEED_MPS=10`、`MOVING_TARGET_L
 | 輸出 | 主 CSV + 視覺 CSV + 標註影片 + raw 影片 + events | **主 CSV + events** |
 | 主 CSV 欄位 | 160 欄 (含 real_*、gcomp_*、vis_*)，另有視覺 CSV 54 欄 | 80 欄 + 雲台 UART 34 欄 (`vis_*`、`gimbal_*`，沒接雲台時留空)。拿掉 `frame_idx`、`img_to_cmd_ms`、`real_*`、`gcomp_*`；**新增 `tgt_lat`、`tgt_lon`** (虛擬目標當下 GPS，方便在地圖上畫) |
 | 檔名 | `flight_YYYYmmdd_HHMMSS_<tag>.csv` | `xwing_virtual_YYYYmmdd_HHMMSS_<tag>.csv` |
-| 命令列 | `--static/--moving/--start/--speed/--target/--predive-dist/--bench/--bench-pitch/--bench-dive/--ground-test/--dive-hold-heading/--case/--tgt-heading/--no-video/--no-annot/--inject-*` | 同左，但拿掉 `--no-video`、`--no-annot`、`--inject-*`、`--predive` |
+| 命令列 | `--static/--moving/--start/--speed/--target/--predive-dist/--bench/--bench-pitch/--bench-dive/--ground-test/--case/--tgt-heading/--no-video/--no-annot/--inject-*` | 同左，但拿掉 `--no-video`、`--no-annot`、`--inject-*`、`--predive` |
 | `BENCH_GEOMETRY_AGL_M` | 寫死 120 | `= CRUISE_AGL_M` (240) |
 
 ---

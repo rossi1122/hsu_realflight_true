@@ -95,8 +95,8 @@
 | `YAW2SRV_*` / `KFF_RDDRMIX` | 方向舵混控 |
 
 > ⚠ **俯衝速度從 ~36 m/s 升到 ~47–55 m/s**，動壓是原本的 1.7–2.3 倍，舵面效率也跟著變高。
-> 飛控如果有開空速縮放 (`SCALING_SPEED`)，會自動補償；程式端 DIVE 的方向舵也已經加回
-> 空速排程 (`RUDDER_VSCHED`)。首飛請看 `rcout*` 和 `pid_dtheta_deg` 有沒有振盪。
+> 飛控如果有開空速縮放 (`SCALING_SPEED`)，會自動補償；程式端 DIVE 的方向舵參數 (含 `RUDDER_VSCHED`)
+> 與原版相同、不依空速縮小 (2026/10/22 決定)。首飛請看 `rcout*`、`rudder_sent_deg` 和 `pid_dtheta_deg` 有沒有振盪。
 
 ---
 

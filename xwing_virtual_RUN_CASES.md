@@ -7,10 +7,8 @@
 > - 主程式改成 `xwing_virtual_flight.py`
 > - 新場地、240 m / 30 m/s / 30° 俯衝到 120 m
 
-4 個 case = DIVE 橫向 A/B 版本 × 靜止 / 移動目標 (與原版相同)。
-
-> **版本 A** = DIVE 用虛擬目標 PID 修橫向 (方向舵)
-> **版本 B** = DIVE 不修橫向，凍結進 DIVE 那刻的航向 (`--dive-hold-heading`)
+2 個 case = 移動 / 靜止目標。DIVE 一律用虛擬目標 PID 修橫向 (方向舵，版本 A)。
+> 2026/10/22 起移除版本 B (`--dive-hold-heading`)，方向舵參數全部與原版 config.py 相同。
 
 ---
 
@@ -73,22 +71,16 @@ Mission Planner → 載入 `xwing_virtual_mission.waypoints` (240 m 跑道)，
 
 ---
 
-## 4 個 CASE 指令
+## CASE 指令
 
 ```bash
 roslaunch mavros apm.launch      # 另一個 terminal
 
-# Case 1: 移動 + 版本 A
+# Case 1: 移動目標 (實飛用)
 python3 xwing_virtual_flight.py --moving
 
-# Case 2: 移動 + 版本 B
-python3 xwing_virtual_flight.py --moving --dive-hold-heading
-
-# Case 3: 靜止 + 版本 A
+# Case 2: 靜止目標
 python3 xwing_virtual_flight.py --static
-
-# Case 4: 靜止 + 版本 B
-python3 xwing_virtual_flight.py --static --dive-hold-heading
 ```
 
 臨時改推頭距離：`--predive-dist 420`。臨時改目標起點：`--start lat,lon` (移動) / `--target lat,lon` (靜止)。

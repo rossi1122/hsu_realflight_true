@@ -11,8 +11,7 @@ xwing_virtual 啟動步驟 (控制用純虛擬軌跡; 對方雲台走 UART)
 2.到專案資料夾
 打開terminal
 輸入
-python3 xwing_virtual_flight.py --moving --dive-hold-heading   #移動版 + 版本 B (方向舵還沒掛機測過用這個)
-python3 xwing_virtual_flight.py --moving                       #移動版 + 版本 A (方向舵測過才用)
+python3 xwing_virtual_flight.py --moving                       #移動版 (DIVE 一律用方向舵 PID)
 python3 xwing_virtual_flight.py --static                       #靜止版
 
 雲台 (對方 Orin NX, USB-UART) 預設開啟: SEARCH 送 '1' 追蹤, 進 PRE_DIVE 送 '2' 鎖定 -30 度

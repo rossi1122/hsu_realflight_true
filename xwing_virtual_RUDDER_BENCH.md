@@ -1,5 +1,7 @@
 # X-wing 方向舵掛機測試流程 (test_rudder_bench.py)
 
+> **2026/10/22 更新：版本 B (`--dive-hold-heading`) 已移除，DIVE 一律用方向舵 PID。** 本文件提到版本 B 的地方只是當時的判斷依據；現在 Test A/B/E 任何一項不通過就不能飛。
+
 > 目的：確認 X-wing 上「程式送出的方向舵命令」和「飛控實際打出的舵面」之間的對應關係與正負號，
 > 決定 DIVE 段能不能用 PID 控制方向舵 (版本 A)，還是要用 `--dive-hold-heading` (版本 B)。
 >

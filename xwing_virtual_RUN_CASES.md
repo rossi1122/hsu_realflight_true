@@ -30,8 +30,8 @@ python3 xwing_virtual_route.py          # 重新產生路線圖 / 航點 / KML
 
 目標座標已經寫在 `xwing_virtual_config.py`：
 ```
-MOVING_START_GPS   = (23.7217999, 120.3798795)   # 任務規劃 WP4 (2026/10/19)
-MOVING_HEADING_GPS = (23.7206860, 120.3798795)   # 起點正南 124 m, 方位 180.0° (往南)
+MOVING_START_GPS   = (23.7214954, 120.3799117)   # 任務規劃 WP4 (2026/10/22)
+MOVING_HEADING_GPS = (23.7203815, 120.3799117)   # 起點正南 124 m, 方位 180.0° (往南)
 TARGET_GPS         = MOVING_START_GPS            # 靜止版
 ```
 
@@ -114,7 +114,7 @@ python3 xwing_virtual_flight.py --static
 ## 開機訊息檢查 (每趟都看)
 
 ```
-[xwing] 移動目標: 起點 (23.7217999, 120.3798795) 方位 180.0° 速度 10.0 m/s ...
+[xwing] 移動目標: 起點 (23.7214954, 120.3799117) 方位 180.0° 速度 10.0 m/s ...
 [xwing] 巡航 240 m / 30 m/s, 俯衝 30° → 120 m 拉平, 速度上限 60 m/s
 [xwing] 推頭門檻: 到目標水平距 ≤ 416 m (純幾何 416 m)
 [Bridge] PTCH_LIM_MIN_DEG=-45° OK (需求 -40°)

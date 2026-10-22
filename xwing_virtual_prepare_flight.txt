@@ -27,7 +27,7 @@
         sudo udevadm control --reload-rules && sudo udevadm trigger
         拔插雲台 USB → ls -l /dev/gimbal 看到 -> ttyUSB0 就好
       (Orin NX 上只能插一個 CP2102; 飛控是 ttyACM0 不受影響)
-  [v] 虛擬目標起點 = 任務規劃 WP4 (23.7217999, 120.3798795), 往南 10 m/s
+  [v] 虛擬目標起點 = 任務規劃 WP4 (23.7214954, 120.3799117), 往南 10 m/s
   [v] 飛控: PTCH_LIM_MIN_DEG -45, AIRSPEED_MAX 60, GUIDED 由地面站切
   [v] 方向舵: Test A / B / E 通過, 正舵量 = 右偏航 → DIVE 一律用方向舵 PID
 
@@ -91,7 +91,7 @@ Terminal 2 (到專案資料夾):
  F. 開機訊息檢查 (有 ★★★ 就不要飛)
 ==================================================================
 要看到:
-  [xwing] 移動目標: 起點 (23.7217999, 120.3798795) 方位 180.0° 速度 10.0 m/s ...
+  [xwing] 移動目標: 起點 (23.7214954, 120.3799117) 方位 180.0° 速度 10.0 m/s ...
   [xwing] 推頭門檻: 到目標水平距 ≤ 416 m
   DIVE 方向舵: 方向舵 PID (版本 A); 空速排程 RUDDER_VSCHED=((999.0, 1.0),)
   [xwing] 雲台視覺 UART: /dev/serial/by-id/usb-Silicon_Labs_CP2102... (資料只記錄); 模式鍵 ON

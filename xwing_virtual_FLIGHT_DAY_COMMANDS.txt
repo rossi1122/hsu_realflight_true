@@ -69,7 +69,7 @@ python3 xwing_virtual_flight.py --moving --no-vision --case flight1 2>&1 | tee c
 
 開好要看到 (詳見 prepare_flight.txt F 節):
     DIVE 方向舵: 方向舵 PID (版本 A); 空速排程 RUDDER_VSCHED=((999.0, 1.0),)
-    目標=移動 起點 (23.7217999, 120.3798795) 方位 180.0°
+    目標=移動 起點 (23.7214954, 120.3799117) 方位 180.0°
     [UARTVision] 已開啟 /dev/serial/by-id/usb-Silicon_Labs_CP2102...
     [Bridge] 串流率設定完成 6/6
     每秒一行 [SEARCH ] ... VIS link=1

@@ -287,7 +287,7 @@ python3 test_rudder_bench.py --test E --rudder-ch 3 --elevator-ch 2
 
 ### 3-1. 到場設定
 
-1. **目標起點**：`MOVING_START_GPS = (23.7217999, 120.3798795)` = 任務規劃 **WP4** (2026/10/19)。
+1. **目標起點**：`MOVING_START_GPS = (23.7214954, 120.3799117)` = 任務規劃 **WP4** (2026/10/22)。
    要移動起點時，飛行指令加 `--start lat,lon`。
 2. **航線**：用你在 Mission Planner 規劃好的任務 (WP1–WP6 + DO_JUMP)：
 
@@ -295,7 +295,7 @@ python3 test_rudder_bench.py --test E --rudder-ch 3 --elevator-ch 2
    |---|---|
    | WP1 → WP2 | 北邊往東飛，WP2 是**轉彎點** (轉往南) |
    | **WP3** | **切 GUIDED 點**：WP2 後約 400 m、目標起點北方約 613 m |
-   | **WP4** | **虛擬目標起點** (23.7217999, 120.3798795) |
+   | **WP4** | **虛擬目標起點** (23.7214954, 120.3799117) |
    | WP5、WP6 | 西側回程 |
    | DO_JUMP | 回 WP1，無限繞 |
 
@@ -338,7 +338,7 @@ python3 xwing_virtual_flight.py --moving --case flight1   # DIVE 一律用方向
 
 要看到：
 ```
-[xwing] 移動目標: 起點 (23.7217999, 120.3798795) 方位 180.0° 速度 10.0 m/s ...
+[xwing] 移動目標: 起點 (23.7214954, 120.3799117) 方位 180.0° 速度 10.0 m/s ...
 [xwing] 巡航 240 m / 30 m/s, 俯衝 30° → 120 m 拉平, 速度上限 60 m/s
 [xwing] 推頭門檻: 到目標水平距 ≤ 416 m (純幾何 416 m)
 [xwing] 雲台視覺 UART: ... (資料只記錄); 模式鍵 ON

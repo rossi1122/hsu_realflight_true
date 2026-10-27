@@ -62,6 +62,7 @@
 | `xwing_virtual_TEST_CHECKLIST.txt` | (新) | 測試總清單 (照順序打勾)；10/17 已完成第 1–6 項 |
 | `xwing_virtual_TEST_REPORT_20261017.md` | (新) | ★ 2026/10/17 X-wing 地面測試報告 (參數、方向舵 A/B/E、整機掛機) |
 | `test_guided_rearm.py` | (新) | 重複撥 GUIDED 的流程測試 (不需要 ROS)：`python3 test_guided_rearm.py` → PASS |
+| `xwing_virtual_PREFLIGHT_REVIEW_20261027.md` | (新) | ★ 週四飛測前總檢查：與原專案的參數差異、驗證狀態、飛前必做 |
 | `xwing_virtual_FLIGHT_DAY_QUICK.txt` | (新) | ★ 實飛指令最精簡版 (一頁，當天照抄) |
 | `xwing_virtual_FLIGHT_DAY_COMMANDS.txt` | (新) | ★ 實飛當天所有指令 (照順序，可直接複製) |
 | `xwing_virtual_TEST_REPORT_20261020.md` | (新) | ★ 2026/10/20 雲台整合地面測試報告 (模式鍵、鎖定時間、資料鏈) |

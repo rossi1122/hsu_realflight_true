@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 flight_logs/
 bench_logs/
+plot_results/
+car_bin/

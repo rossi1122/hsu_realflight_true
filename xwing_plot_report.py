@@ -134,12 +134,23 @@ def read_events(csv_path):
     p = csv_path[:-4] + '_events.txt' if csv_path.endswith('.csv') else None
     if not p or not os.path.isfile(p):
         return []
+    # Orin (Linux) 寫的是 UTF-8; 在 Windows 跑 test_plot_report.py 時飛行程式用系統編碼 (cp950) 寫
+    with open(p, 'rb') as f:
+        raw = f.read()
+    text = None
+    for enc in ('utf-8', 'cp950'):
+        try:
+            text = raw.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
+        text = raw.decode('utf-8', errors='replace')
     out = []
-    with open(p, encoding='utf-8', errors='ignore') as f:
-        for ln in f:
-            m = re.match(r'\s*([\d.]+)s\s+(.*)', ln.rstrip('\n'))
-            if m:
-                out.append((float(m.group(1)), m.group(2)))
+    for ln in text.splitlines():
+        m = re.match(r'\s*([\d.]+)s\s+(.*)', ln)
+        if m:
+            out.append((float(m.group(1)), m.group(2)))
     return out
 
 

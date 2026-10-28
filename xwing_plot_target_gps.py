@@ -170,6 +170,47 @@ def runs_in(d):
     return sorted(int(r) for r in np.unique(d['run'][g]))
 
 
+# ─────────────────────────── 共用 (也給 xwing_plot_report 用) ───────────────────────────
+def pick_bin(bins, seg0, seg1):
+    """挑出唯一一個完整涵蓋 [seg0, seg1] (gps_unix) 的 BIN. 回傳 (path, gps dict)."""
+    cands = []
+    for p, g in bins:
+        x = g['gps_unix']
+        overlap = max(0.0, min(x[-1], seg1) - max(x[0], seg0))
+        full = x[0] <= seg0 and x[-1] >= seg1
+        if overlap > 0:
+            cands.append((full, overlap, p, g))
+    cands.sort(key=lambda c: (c[0], c[1]), reverse=True)
+    if not cands or not cands[0][0]:
+        raise ValueError(f'找不到完整涵蓋 PRE_DIVE~DIVE ({taiwan_time(seg0)} ~ '
+                         f'{taiwan_time(seg1, ms=False)}) 的 BIN')
+    if len(cands) > 1 and cands[1][0]:
+        raise ValueError('多個 BIN 都涵蓋任務時間, 無法判定是哪一個: '
+                         + ', '.join(os.path.basename(c[2]) for c in cands if c[0]))
+    return cands[0][2], cands[0][3]
+
+
+def log_origin(lat, lon, ac_n, ac_e):
+    """log 自己的 NED 原點 (由 lat/lon 與 ac_n/ac_e 反推, 不用飛控 home)."""
+    rad = np.pi / 180
+    ok = np.isfinite(lat) & np.isfinite(lon) & np.isfinite(ac_n) & np.isfinite(ac_e)
+    if ok.sum() < 2:
+        raise ValueError('log 沒有經緯度')
+    lat0 = float(np.median(lat[ok] - ac_n[ok] / EARTH_RADIUS_M / rad))
+    lon0 = float(np.median(lon[ok] - ac_e[ok] / (EARTH_RADIUS_M * np.cos(lat0 * rad)) / rad))
+    res = np.hypot((lat[ok] - lat0) * rad * EARTH_RADIUS_M - ac_n[ok],
+                   (lon[ok] - lon0) * rad * EARTH_RADIUS_M * np.cos(lat0 * rad) - ac_e[ok])
+    if np.quantile(res, .95) > .5:
+        raise ValueError('log 的經緯度與 ac_n/ac_e 不是固定原點座標, 停止比較')
+    return lat0, lon0
+
+
+def car_ned(g, lat0, lon0):
+    rad = np.pi / 180
+    return ((g['Lat'] - lat0) * rad * EARTH_RADIUS_M,
+            (g['Lng'] - lon0) * rad * EARTH_RADIUS_M * np.cos(lat0 * rad))
+
+
 # ─────────────────────────── 比較 ───────────────────────────
 def compare(d, run, bins, out_prefix, max_gap=2.0, after=10.0, leap_seconds=GPS_UTC_OFFSET_S,
             title=None, pdf=None):
@@ -191,33 +232,10 @@ def compare(d, run, bins, out_prefix, max_gap=2.0, after=10.0, leap_seconds=GPS_
         raise ValueError('虛擬目標沒有移動 (靜止版), 不比較')
     seg0 = gu[pre].min() if pre.any() else gu[dive].min()
     seg1 = gu[dive].max()
-    cands = []
-    for p, g in bins:
-        x = g['gps_unix']
-        overlap = max(0.0, min(x[-1], seg1) - max(x[0], seg0))
-        full = x[0] <= seg0 and x[-1] >= seg1
-        if overlap > 0:
-            cands.append((full, overlap, p, g))
-    cands.sort(key=lambda c: (c[0], c[1]), reverse=True)
-    if not cands or not cands[0][0]:
-        raise ValueError(f'找不到完整涵蓋 PRE_DIVE~DIVE ({taiwan_time(seg0)} ~ '
-                         f'{taiwan_time(seg1, ms=False)}) 的 BIN')
-    if len(cands) > 1 and cands[1][0]:
-        raise ValueError('多個 BIN 都涵蓋任務時間, 無法判定是哪一個: '
-                         + ', '.join(os.path.basename(c[2]) for c in cands if c[0]))
-    _, _, bin_path, g = cands[0]
+    bin_path, g = pick_bin(bins, seg0, seg1)
 
-    # log 自己的 NED 原點 (由 lat/lon 與 ac_n/ac_e 反推, 不用飛控 home)
-    rad = np.pi / 180
-    ok = np.isfinite(d['lat']) & np.isfinite(d['ac_n'])
-    lat0 = float(np.median(d['lat'][ok] - d['ac_n'][ok] / EARTH_RADIUS_M / rad))
-    lon0 = float(np.median(d['lon'][ok] - d['ac_e'][ok] / (EARTH_RADIUS_M * np.cos(lat0 * rad)) / rad))
-    res = np.hypot((d['lat'][ok] - lat0) * rad * EARTH_RADIUS_M - d['ac_n'][ok],
-                   (d['lon'][ok] - lon0) * rad * EARTH_RADIUS_M * np.cos(lat0 * rad) - d['ac_e'][ok])
-    if np.quantile(res, .95) > .5:
-        raise ValueError('log 的經緯度與 ac_n/ac_e 不是固定原點座標, 停止比較')
-    car_n = (g['Lat'] - lat0) * rad * EARTH_RADIUS_M
-    car_e = (g['Lng'] - lon0) * rad * EARTH_RADIUS_M * np.cos(lat0 * rad)
+    lat0, lon0 = log_origin(d['lat'], d['lon'], d['ac_n'], d['ac_e'])
+    car_n, car_e = car_ned(g, lat0, lon0)
 
     # 這一趟的時間窗: 目標開始動 ~ PULLOUT/DONE 後 after 秒 (仍在 GUIDED 內)
     idx = np.where(sel & np.isfinite(gu))[0]

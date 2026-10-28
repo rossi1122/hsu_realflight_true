@@ -28,6 +28,7 @@ xwing_plot_report.py — xwing_virtual 實飛 log → 報告圖 + 自動檢查 (
   fig9_gimbal.png            雲台 UART (有接雲台才有): 連線、模式、pitch、偵測
   fig10_system.png           電壓、控制迴路週期
   fig11_target_gps.png       (有給 BIN) 虛擬目標 vs 真車 GPS
+  fig12_gimbal_replay.png    (DIVE 有雲台資料) 雲台資料當控制輸入: 離線重放 PID, 跟實際命令比較
   report.pdf                 上面全部合成一份
   summary.txt                時間線 + 各段數字 + 自動檢查 (⚠ = 建議看的參數)
 """
@@ -729,6 +730,332 @@ def fig10_system(R, path, title, pdf, st):
     _save(fig, path, pdf)
 
 
+# ─────────────────────────── 雲台資料 → 控制命令 (離線重放) ───────────────────────────
+# 雲台模型: pitch / roll 相對地面 (自穩), yaw 跟機頭 (沒有 yaw 軸).
+# 把雲台相機看到的目標方向, 轉到 DIVE 用的虛擬相機 (機身固定, 光軸 = 機頭, roll=0,
+# 與 dive_guidance.project_body_camera 同一條旋轉鏈), 再丟進同一套 DivePID.
+_R_G2C = np.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]], dtype=float)
+
+
+def _ry(deg):
+    c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+    return np.array([[c, 0, -s], [0, 1, 0], [s, 0, c]])
+
+
+def _rz(deg):
+    c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+    return np.array([[c, s, 0], [-s, c, 0], [0, 0, 1]])
+
+
+def _rx(deg):
+    c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+    return np.array([[1, 0, 0], [0, c, s], [0, -s, c]])
+
+
+def _virt_intrinsics():
+    if CFG is not None and hasattr(CFG, 'virtual_intrinsics'):
+        return CFG.virtual_intrinsics()
+    return C('FX_1X'), C('FY_1X'), C('CX_1X'), C('CY_1X')
+
+
+def _interp_at(t_full, y_full, tq, angle=False):
+    ok = np.isfinite(t_full) & np.isfinite(y_full)
+    if ok.sum() < 2:
+        return np.full(len(tq), np.nan)
+    y = y_full[ok]
+    if angle:
+        y = np.degrees(np.unwrap(np.radians(y)))
+    return np.interp(tq, t_full[ok], y)
+
+
+def gimbal_to_virtual(R, args):
+    """每一列: 雲台偵測 → 虛擬相機像素 (u, v). 回傳 (u, v, valid, image_age_ms)."""
+    L = R.L
+    n = L.n
+    t = L.num('t')
+    fxv, fyv, cxv, cyv = _virt_intrinsics()
+    ox, oy = L.num('vis_off_x'), L.num('vis_off_y')
+    fx, fy = L.num('vis_fx'), L.num('vis_fy')
+    gp = args.gimbal_pitch_sign * L.num('vis_gimbal_pitch') + args.gimbal_pitch_offset
+    gr = args.gimbal_roll_sign * L.num('vis_gimbal_roll')
+    gr = np.where(np.isfinite(gr), gr, 0.0)
+    valid = (L.num('vis_valid') > 0) & (L.num('vis_link') > 0) & np.isfinite(ox) & \
+        np.isfinite(oy) & (fx > 0) & (fy > 0) & np.isfinite(gp)
+    # 取像時刻: 控制這一拍時影像已多舊 (v7); 沒有就用 收到多久 + 辨識多久
+    age = L.num('vis_cap_age_ms')
+    alt = L.num('vis_rx_age_ms') + np.where(np.isfinite(L.num('vis_det_age_ms')),
+                                            L.num('vis_det_age_ms'), 0.0)
+    age = np.where(np.isfinite(age), age, np.where(np.isfinite(alt), alt, 0.0))
+    tc = t - age / 1000.0
+    hdg_col = 'yaw_deg' if L.has('yaw_deg') else 'chi_deg'
+    th_c = _interp_at(t, L.num('theta_deg'), tc)
+    hd_c = _interp_at(t, L.num(hdg_col), tc, angle=True)
+    u = np.full(n, np.nan)
+    v = np.full(n, np.nan)
+    for i in np.where(valid)[0]:
+        ray = np.array([ox[i] / fx[i], oy[i] / fy[i], 1.0])
+        cam = _R_G2C @ _ry(gp[i]) @ _rx(gr[i]) @ _rz(hd_c[i])
+        ref = _R_G2C @ _ry(th_c[i]) @ _rz(hd_c[i])
+        c = ref @ cam.T @ ray
+        if np.all(np.isfinite(c)) and c[2] > 1e-6:
+            u[i] = cxv + fxv * c[0] / c[2]
+            v[i] = cyv + fyv * c[1] / c[2]
+    return u, v, np.isfinite(u), age
+
+
+def car_in_virtual(R, bins):
+    """用真車 GPS 算「車子理論上在虛擬相機的哪裡」(= 沒有量測誤差的雲台). 失敗回傳 None, 原因."""
+    import xwing_plot_target_gps as TG
+    L = R.L
+    gu = L.num('gps_unix')
+    d = R.m('PRE_DIVE', 'DIVE')
+    if not d.any() or np.isfinite(gu[d]).sum() < 2:
+        return None, 'log 沒有 gps_unix'
+    try:
+        _, g = TG.pick_bin(bins, np.nanmin(gu[d]), np.nanmax(gu[d]))
+        lat0, lon0 = TG.log_origin(L.num('lat'), L.num('lon'), L.num('ac_n'), L.num('ac_e'))
+    except ValueError as exc:
+        return None, str(exc)
+    cn, ce = TG.car_ned(g, lat0, lon0)
+    rn = TG.interpolate(g['gps_unix'], cn, gu, 2.0)
+    re_ = TG.interpolate(g['gps_unix'], ce, gu, 2.0)
+    fxv, fyv, cxv, cyv = _virt_intrinsics()
+    an, ae, agl = L.num('ac_n'), L.num('ac_e'), L.num('agl')
+    th = L.num('theta_deg')
+    hd = L.num('yaw_deg') if L.has('yaw_deg') else L.num('chi_deg')
+    u = np.full(L.n, np.nan)
+    v = np.full(L.n, np.nan)
+    for i in np.where(np.isfinite(rn) & np.isfinite(an) & np.isfinite(agl) & np.isfinite(th))[0]:
+        w = np.array([rn[i] - an[i], re_[i] - ae[i], agl[i]])
+        c = _R_G2C @ (_ry(th[i]) @ _rz(hd[i]) @ w)
+        if c[2] > 0.5:
+            u[i] = cxv + fxv * c[0] / c[2]
+            v[i] = cyv + fyv * c[1] / c[2]
+    return (u, v), ''
+
+
+def replay_pid(R, mu, mv, mdet):
+    """在 DIVE 段用 (mu, mv, mdet) 重跑一次 DivePID; 回傳 (pitch_cmd, dpsi, ok)."""
+    try:
+        from dive_guidance import DivePID
+        from xwing_virtual_common import build_gcfg
+    except Exception:  # noqa: BLE001
+        return None
+    if CFG is None:
+        return None
+    gcfg = build_gcfg(CFG, moving=True, predive_dist=CFG.PREDIVE_DIST_M)
+    L = R.L
+    t = L.num('t')
+    idx = np.where(R.m('DIVE'))[0]
+    out_p = np.full(L.n, np.nan)
+    out_d = np.full(L.n, np.nan)
+    if len(idx) < 3:
+        return out_p, out_d
+    pc, hc = L.num('pitch_cmd'), L.num('heading_cmd')
+    i0 = idx[0]
+    j = i0 - 1 if i0 > 0 and np.isfinite(pc[i0 - 1]) else i0
+    pid = DivePID(gcfg)
+    pid.reset(pitch0=float(pc[j]), heading0=float(hc[j]))
+    usp, vsp = L.num('virt_u_sp'), L.num('virt_v_sp')
+    vn, ve, th = L.num('vn'), L.num('ve'), L.num('theta_deg')
+    yaw = L.num('yaw_deg') if L.has('yaw_deg') else L.num('chi_deg')
+    prev = i0
+    for k in idx[1:]:
+        dt = max(1e-3, min(t[k] - t[prev], 0.5))
+        prev = k
+        if np.isfinite(vn[k]) and np.isfinite(ve[k]) and vn[k] ** 2 + ve[k] ** 2 > 4.0:
+            hnow = math.degrees(math.atan2(ve[k], vn[k]))
+        else:
+            hnow = float(yaw[k]) if np.isfinite(yaw[k]) else 0.0
+        det = bool(mdet[k])
+        p, _ = pid.update(float(mu[k]) if det else None, float(mv[k]) if det else None,
+                          float(usp[k]) if np.isfinite(usp[k]) else gcfg.CX,
+                          float(vsp[k]) if np.isfinite(vsp[k]) else gcfg.CY,
+                          det, float(th[k]), hnow, dt)
+        out_p[k] = p
+        out_d[k] = pid.info['dpsi']
+    return out_p, out_d
+
+
+def fig12_gimbal_replay(R, path, title, pdf, st, args, bins):
+    """雲台資料當控制輸入: 誤差、重放命令與實際命令比較. 沒有 DIVE 或沒有雲台資料就不畫."""
+    L, t = R.L, R.t
+    d = R.m('DIVE')
+    if not d.any() or not (L.has('vis_valid') and L.has('vis_off_x')):
+        return False
+    gu, gv, gok, age = gimbal_to_virtual(R, args)
+    if not (gok & d).any():
+        st['gr_note'] = 'DIVE 段沒有任何雲台偵測'
+        return False
+    fxv, fyv, cxv, cyv = _virt_intrinsics()
+    deg_u = lambda u: np.degrees(np.arctan((u - cxv) / fxv))   # noqa: E731
+    deg_v = lambda v: np.degrees(np.arctan((v - cyv) / fyv))   # noqa: E731
+    vu, vv = L.num('virt_bbox_u'), L.num('virt_bbox_v')
+    car, why = car_in_virtual(R, bins) if bins else (None, '沒有給車子 BIN')
+    st['gr_car_note'] = why
+    dn = np.where(d, 1.0, np.nan)
+
+    # 重放: (1) 虛擬量測 → 確認重放 = 實際; (2) 雲台量測
+    rep_v = replay_pid(R, vu, vv, L.num('virt_detected') > 0)
+    rep_g = replay_pid(R, gu, gv, gok)
+    K = C('K_LAT_TO_RUDDER')
+    lim = C('RUDDER_LIMIT_DEG')
+    pc_log = L.num('pitch_cmd')
+    rud_log = L.num('rudder_raw_deg')
+    if not np.isfinite(rud_log[d]).any():
+        rud_log = K * L.num('pid_dpsi_deg')
+
+    a0, a1 = R.window(1.0, 1.0)
+    w = (t >= a0) & (t <= a1)
+    fig, ax = plt.subplots(5, 1, figsize=(12, 13), sharex=True, layout='constrained')
+    for k_, (fv, fg, col, lab) in enumerate(((deg_u(vu), deg_u(gu), 0, 'Lateral (+right)'),
+                                             (deg_v(vv), deg_v(gv), 1, 'Vertical (+down)'))):
+        a = ax[k_]
+        a.plot(t[w], (fv * dn)[w], color=C_ACT, lw=1.4, label='virtual target (used for control)')
+        a.plot(t[w], (np.where(gok, fg, np.nan) * dn)[w], '.', ms=3, color='#FF7F0E',
+               label='gimbal → virtual camera')
+        if car is not None:
+            fc = deg_u(car[0]) if k_ == 0 else deg_v(car[1])
+            a.plot(t[w], (fc * dn)[w], color='#2CA02C', lw=1, ls='--', label='real car GPS (geometry)')
+        a.axhline(0, color='k', lw=.5)
+        a.set_ylabel(f'{lab}\noffset (deg)')
+    pr = rep_g[0] if rep_g is not None else None
+    ax[2].plot(t[w], (pc_log * dn)[w], color=C_ACT, lw=1.4, label='pitch cmd actual (virtual)')
+    if rep_v is not None:
+        ax[2].plot(t[w], rep_v[0][w], color='#7F7F7F', lw=.9, ls=':', label='replay with virtual (check)')
+        ax[2].plot(t[w], pr[w], color='#FF7F0E', lw=1.4, label='replay with gimbal data')
+    ax[2].plot(t[w], (L.num('theta_deg') * dn)[w], color='#999999', lw=.8, label='pitch actual')
+    ax[2].set_ylabel('Pitch cmd (deg)')
+    ax[3].plot(t[w], (np.clip(rud_log, -lim, lim) * dn)[w], color=C_ACT, lw=1.4,
+               label='rudder actual (virtual)')
+    if rep_g is not None:
+        ax[3].plot(t[w], np.clip(K * rep_v[1], -lim, lim)[w], color='#7F7F7F', lw=.9, ls=':',
+                   label='replay with virtual (check)')
+        ax[3].plot(t[w], np.clip(K * rep_g[1], -lim, lim)[w], color='#FF7F0E', lw=1.4,
+                   label='replay with gimbal data')
+    ax[3].set_ylabel(f'Rudder (deg)\nK_LAT={K:g}, ±{lim:g}')
+    ax[4].plot(t[w], (gok * 1.0 * dn)[w], color='#2CA02C', drawstyle='steps-post',
+               label='gimbal detection (1/0)')
+    ax[4].set_ylim(-.1, 1.15)
+    ax[4].set_ylabel('Detected')
+    a4 = ax[4].twinx()
+    a4.plot(t[w], (np.where(L.num('vis_link') > 0, age, np.nan) * dn)[w], color='#9467BD', lw=.9,
+            label='image age at control tick (ms)')
+    a4.set_ylabel('Image age (ms)', color='#9467BD')
+    ax[4].set_xlabel('Time from GUIDED (s)')
+
+    # ── 數字 ──
+    st['gr_det_pct'] = 100.0 * gok[d].mean()
+    st['gr_age_med'] = float(np.nanmedian(age[d & gok])) if (d & gok).any() else float('nan')
+    eu_g, ev_g = deg_u(gu), deg_v(gv)
+    eu_v, ev_v = deg_u(vu), deg_v(vv)
+    m = d & gok
+    st['gr_du_vs_virtual'] = (nanmean((eu_g - eu_v)[m]), rmse((eu_g - eu_v)[m]))
+    st['gr_dv_vs_virtual'] = (nanmean((ev_g - ev_v)[m]), rmse((ev_g - ev_v)[m]))
+    if car is not None:
+        eu_c, ev_c = deg_u(car[0]), deg_v(car[1])
+        st['gr_du_vs_car'] = (nanmean((eu_g - eu_c)[m]), rmse((eu_g - eu_c)[m]))
+        st['gr_dv_vs_car'] = (nanmean((ev_g - ev_c)[m]), rmse((ev_g - ev_c)[m]))
+        st['gr_car_vs_virtual'] = (rmse((eu_c - eu_v)[d]), rmse((ev_c - ev_v)[d]))
+    if rep_g is not None:
+        st['gr_check_pitch'] = rmse((rep_v[0] - pc_log)[d])
+        st['gr_check_rud'] = rmse((K * rep_v[1] - rud_log)[d])
+        st['gr_pitch_rmse'] = rmse((pr - pc_log)[d])
+        st['gr_pitch_mean'] = nanmean((pr - pc_log)[d])
+        st['gr_rud_rmse'] = rmse((np.clip(K * rep_g[1], -lim, lim) - np.clip(rud_log, -lim, lim))[d])
+    box = (f'gimbal detection in DIVE {st["gr_det_pct"]:5.1f} %   image age median '
+           f'{f1(st["gr_age_med"], 0)} ms\n'
+           f'gimbal − virtual: u {st["gr_du_vs_virtual"][0]:+.2f}° (RMSE {st["gr_du_vs_virtual"][1]:.2f}°)'
+           f'  v {st["gr_dv_vs_virtual"][0]:+.2f}° (RMSE {st["gr_dv_vs_virtual"][1]:.2f}°)')
+    if car is not None:
+        box += (f'\ngimbal − car GPS: u {st["gr_du_vs_car"][0]:+.2f}° (RMSE {st["gr_du_vs_car"][1]:.2f}°)'
+                f'  v {st["gr_dv_vs_car"][0]:+.2f}° (RMSE {st["gr_dv_vs_car"][1]:.2f}°)')
+    stat_box(ax[0], box, 'lower left')
+    if rep_g is not None:
+        stat_box(ax[2], f'gimbal replay − actual: RMSE {st["gr_pitch_rmse"]:.2f}°  '
+                        f'mean {st["gr_pitch_mean"]:+.2f}°\n'
+                        f'replay check (virtual): RMSE {st["gr_check_pitch"]:.3f}°', 'lower left')
+        stat_box(ax[3], f'gimbal replay − actual: RMSE {st["gr_rud_rmse"]:.2f}°\n'
+                        f'replay check (virtual): RMSE {st["gr_check_rud"]:.3f}°', 'lower left')
+    for a in list(ax):
+        shade_modes(a, R.segs)
+        a.grid(alpha=.25)
+        a.legend(fontsize=7, loc='upper right', ncol=3)
+        a.set_xlim(a0, a1)
+    a4.legend(fontsize=7, loc='lower right')
+    fig.suptitle(f'Fig 12  Gimbal data as control input (offline replay, gimbal pitch/roll earth-ref,'
+                 f' yaw = nose) — {title}', fontsize=10, x=.02, ha='left')
+    mode_legend(fig, R.segs)
+    _save(fig, path, pdf)
+    return True
+
+
+def analyse_gimbal_replay(st):
+    """回傳 (數字, 檢查) 兩個 list, 給 summary 的獨立段落."""
+    nums, chk = [], []
+    if 'gr_det_pct' not in st:
+        if st.get('gr_note'):
+            nums.append(st['gr_note'])
+        return nums, chk
+    nums.append(f'DIVE 段雲台偵測率 {st["gr_det_pct"]:.1f} %, 影像延遲中位數 {f1(st["gr_age_med"], 0)} ms')
+    du, dv = st['gr_du_vs_virtual'], st['gr_dv_vs_virtual']
+    nums.append(f'雲台 − 虛擬目標 (角度): 橫向 平均 {du[0]:+.2f}° RMSE {du[1]:.2f}°, '
+                f'縱向 平均 {dv[0]:+.2f}° RMSE {dv[1]:.2f}°')
+    if 'gr_du_vs_car' in st:
+        cu, cv = st['gr_du_vs_car'], st['gr_dv_vs_car']
+        nums.append(f'雲台 − 真車 GPS 幾何 (= 雲台本身的量測誤差): 橫向 平均 {cu[0]:+.2f}° RMSE {cu[1]:.2f}°, '
+                    f'縱向 平均 {cv[0]:+.2f}° RMSE {cv[1]:.2f}°')
+        pu, pv = st['gr_car_vs_virtual']
+        nums.append(f'真車 − 虛擬目標 (= 車子沒在虛擬位置造成的差): 橫向 RMSE {pu:.2f}°, 縱向 RMSE {pv:.2f}°')
+    else:
+        nums.append(f'沒有真車比較 ({st.get("gr_car_note", "")}) → 上面的差 = 雲台誤差 + 車子位置差, 分不開')
+    if 'gr_pitch_rmse' in st:
+        nums.append(f'重放命令 (雲台) − 實際命令: pitch RMSE {st["gr_pitch_rmse"]:.2f}° '
+                    f'(平均 {st["gr_pitch_mean"]:+.2f}°), 方向舵 RMSE {st["gr_rud_rmse"]:.2f}°')
+        nums.append(f'重放檢查 (用虛擬量測重放 vs 實際): pitch {st["gr_check_pitch"]:.3f}°, '
+                    f'方向舵 {st["gr_check_rud"]:.3f}°')
+        if st['gr_check_pitch'] > 0.5 or st['gr_check_rud'] > 1.0:
+            chk.append('⚠ 用虛擬量測重放跟實際命令對不起來 → 重放不可信 (config 跟飛的時候不同?), 下面的比較僅供參考')
+        else:
+            chk.append('✓ 重放檢查通過: 用虛擬量測重放 = 實際命令, 雲台重放的比較可信')
+    else:
+        chk.append('· 找不到 dive_guidance / xwing_virtual_common, 沒做命令重放 (只比誤差)')
+    det = st['gr_det_pct']
+    chk.append(('✓ ' if det >= 90 else '⚠ ') + f'DIVE 雲台偵測率 {det:.0f} %'
+               + ('' if det >= 90 else ' → 掉幀多, 控制會常常沿用舊量測; 要用來控制得先提高偵測率'))
+    age = st['gr_age_med']
+    if np.isfinite(age):
+        chk.append(('✓ ' if age <= 150 else '⚠ ') + f'影像延遲中位數 {age:.0f} ms'
+                   + ('' if age <= 150 else ' → 延遲大, 直接接 PID 容易振盪: 要降增益或做延遲補償'))
+    if 'gr_du_vs_car' in st:
+        cu, cv = st['gr_du_vs_car'], st['gr_dv_vs_car']
+        if abs(cv[0]) > 1.0 or abs(cu[0]) > 1.0:
+            chk.append(f'⚠ 雲台跟真車幾何有固定偏差 (橫向 {cu[0]:+.1f}°, 縱向 {cv[0]:+.1f}°) → '
+                       f'雲台 pitch 零點 / 安裝角 / 座標假設要校正 (縱向偏差可重跑試 '
+                       f'--gimbal-pitch-offset {cv[0]:+.1f})')
+        else:
+            chk.append(f'✓ 雲台跟真車幾何沒有明顯固定偏差 (橫向 {cu[0]:+.1f}°, 縱向 {cv[0]:+.1f}°)')
+        if max(cu[1], cv[1]) > 2.0:
+            chk.append(f'⚠ 雲台量測跳動大 (RMSE 橫向 {cu[1]:.1f}° / 縱向 {cv[1]:.1f}°) → 要先濾波才適合當控制輸入')
+    # 結論: 有真車時看「雲台本身的量測品質」(偏差 / 跳動 / 偵測率 / 延遲);
+    # 命令差主要來自車子沒在虛擬位置 + 重放是開環 (飛機沒照雲台命令飛), 只當參考.
+    quality = det >= 90 and np.isfinite(age) and age <= 150
+    if 'gr_du_vs_car' in st:
+        cu, cv = st['gr_du_vs_car'], st['gr_dv_vs_car']
+        quality = quality and max(abs(cu[0]), abs(cv[0])) <= 1.0 and max(cu[1], cv[1]) <= 2.0
+        chk.append(('✓ 初步判斷: 雲台量測品質足以當控制輸入' if quality else
+                    '⚠ 初步判斷: 雲台量測品質還不夠直接當控制輸入 (看上面 ⚠ 的項目)')
+                   + ' — 依據: 偵測率、延遲、雲台 vs 真車的偏差與跳動')
+    else:
+        chk.append(('· 偵測率 / 延遲 OK' if quality else '⚠ 偵測率或延遲不夠')
+                   + '; 沒有真車 GPS, 無法確認雲台量得準不準 → 加 --car-bin-dir 再跑一次')
+    if 'gr_pitch_rmse' in st:
+        chk.append('· 命令差 (pitch RMSE {:.1f}°, 方向舵 {:.1f}°) 是開環重放: 飛機沒有照雲台命令飛, '
+                   '誤差不會被修掉, 積分會一直累積 → 只看「一開始往哪個方向修、修多少」, '
+                   '不要拿 RMSE 當成控制效果'.format(st['gr_pitch_rmse'], st['gr_rud_rmse']))
+    return nums, chk
+
+
 # ─────────────────────────── 自動檢查 ───────────────────────────
 def analyse(R, st, events, gps_lines):
     """回傳 (時間線, 數字, 檢查) 三段文字. 檢查用 ✓ / ⚠ / ✗ 開頭."""
@@ -955,6 +1282,9 @@ def make_report(log_path, run, outdir, args, bins):
             if os.path.isfile(p('fig9_gimbal.png')):
                 os.remove(p('fig9_gimbal.png'))
         fig10_system(R, p('fig10_system.png'), sub, pdf, st)
+        if not fig12_gimbal_replay(R, p('fig12_gimbal_replay.png'), sub, pdf, st, args, bins):
+            if os.path.isfile(p('fig12_gimbal_replay.png')):
+                os.remove(p('fig12_gimbal_replay.png'))
         gps_lines = []
         if bins:
             import xwing_plot_target_gps as TG
@@ -964,6 +1294,7 @@ def make_report(log_path, run, outdir, args, bins):
             except ValueError as exc:
                 gps_lines = [f'沒畫 ({exc})']
     tl, evl, nums, chk = analyse(R, st, events, gps_lines)
+    g_nums, g_chk = analyse_gimbal_replay(st)
     head = [f'log : {log_path}', f'趟次: run {run}' + ('  (--full 整份)' if args.full else ''),
             f'時間 0 = 撥 GUIDED (log t = {R.t_on:.2f} s)',
             f'參數: 巡航 {C("CRUISE_AGL_M"):g} m / 俯衝 {C("DIVE_ANGLE_DEG"):g}° / 拉平 '
@@ -976,6 +1307,8 @@ def make_report(log_path, run, outdir, args, bins):
             + '\n\n【數字】\n' + '\n'.join('  ' + x for x in nums)
             + '\n\n【自動檢查】 (✓ 正常  ⚠ 建議看  ✗ 有問題  · 說明; 只是根據 log 的提示, 最後仍以圖為準)\n'
             + '\n'.join('  ' + x for x in chk)
+            + ('\n\n【雲台資料當控制命令 (離線重放, Fig 12)】\n'
+               + '\n'.join('  ' + x for x in g_nums + g_chk) if (g_nums or g_chk) else '')
             + '\n\n【events.txt (這趟)】\n' + '\n'.join(evl) + '\n')
     with open(p('summary.txt'), 'w', encoding='utf-8') as f:
         f.write(text)
@@ -1022,6 +1355,11 @@ def main():
                     help='輸出根目錄 (預設 plot_results/)')
     ap.add_argument('--car-bin-dir', default=None, help='車子 BIN 資料夾 → 加畫 Fig 11')
     ap.add_argument('--car-bin', action='append', default=[], help='直接指定車子 BIN (可多次)')
+    ap.add_argument('--gimbal-pitch-offset', type=float, default=0.0,
+                    help='Fig 12: 雲台 pitch 零點修正 (deg, 加在回報值上)')
+    ap.add_argument('--gimbal-pitch-sign', type=float, default=1.0,
+                    help='Fig 12: 雲台 pitch 符號 (回報往下為負 = 1)')
+    ap.add_argument('--gimbal-roll-sign', type=float, default=1.0, help='Fig 12: 雲台 roll 符號')
     args = ap.parse_args()
 
     logs = []

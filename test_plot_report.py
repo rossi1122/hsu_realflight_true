@@ -6,6 +6,7 @@
 
 用法: python3 test_plot_report.py            (一趟)
       python3 test_plot_report.py --two-runs (同一份 log 切兩次 GUIDED)
+      python3 test_plot_report.py --vision   (加假雲台: pitch/roll 相對地面, 看真車 → 測 Fig 12)
 輸出: plot_test/ (log + car_bin/)  →  plot_results/xwing_virtual_<時間>_plottest/run1/"""
 import sys, types, math, os, glob, shutil, struct, random, subprocess
 REPO = os.path.dirname(os.path.abspath(__file__))
@@ -108,7 +109,7 @@ class FakeBridge:
     def submit(self, out, *a, **k):
         BR['out'] = out
         if out.get('mode') == 'DIVE' and out.get('pid_dpsi_deg') not in (None, ''):
-            raw = cfg.K_LAT_TO_RUDDER * float(out['pid_dpsi_deg']) * 4
+            raw = cfg.K_LAT_TO_RUDDER * float(out['pid_dpsi_deg'])
             lim = cfg.RUDDER_LIMIT_DEG
             RUD['raw'] = raw
             cmd = max(-lim, min(lim, raw))
@@ -130,8 +131,84 @@ F.MavrosIO = FakeIO
 F.ArduPilotAttitudeBridge = FakeBridge
 F.check_airspeed_params = lambda cfg: None
 F.keyboard_thread = lambda flags: None
-case = 'plottest2' if TWO else 'plottest'
-sys.argv = ['x', '--moving', '--no-vision', '--case', case]
+
+
+# ── 車子 (BIN 與假雲台共用): 比虛擬目標晚 4 s 出發, 7 s 加速到 10 m/s, 起點北方 10 m ──
+CAR_LEAD = -4.0
+def car_ne(t_rel):
+    tm = t_rel - 2.0 + CAR_LEAD          # 相對第 1 次撥 GUIDED
+    dist = 0 if tm < 0 else (5 / 7.0 * tm * tm if tm < 7 else 35 + 10 * (tm - 7))
+    return 10 - dist, 1.5
+
+
+# ── 假雲台 (對方 Orin NX): pitch/roll 相對地面, yaw 跟機頭; '1' 追蹤車子, '2' 鎖 -30° ──
+class FakeVision:
+    FX = FY = 1400.0
+    W, H = 1920, 1080
+    def __init__(self, port, baud, **k):
+        self.port, self.baud = port, baud
+        self.connected = True
+        self.stats = {'frames': 0, 'clock': 0, 'bytes': 0, 'header': 0, 'crc': 0, 'payload': 0,
+                      'discarded': 0, 'reopen': 0, 'mode_tx': 0, 'serial_err': 0, 'open_fail': 0}
+        self.req = None
+        self.mode = 0
+        self.gp = -20.0
+        self.t_req = None
+    def start(self): pass
+    def stop(self): pass
+    def request_mode(self, key):
+        if key is not None and key != self.req:
+            self.req, self.t_req = key, CLK['t']
+    def mode_status(self):
+        return self.req, (self.req is not None and self.mode == int(self.req))
+    def mode_timing(self):
+        return {'key': self.req, 't_req': self.t_req, 't_confirm': None, 't_settled': None,
+                'pitch_settled': None}
+    def is_locked(self, pkt):
+        return pkt is not None and pkt['mode'] == 2 and abs(pkt['pitch'] + 30) <= 2
+    def latest(self):
+        now = CLK['t']
+        if self.req is not None and self.t_req is not None and now - self.t_req > 0.2:
+            self.mode = int(self.req)
+        cn, ce = car_ne(now - T0)
+        dn, de, h = cn - AC['n'], ce - AC['e'], AC['h']
+        if self.mode == 2:
+            want = -30.0
+        else:
+            want = -math.degrees(math.atan2(h, math.hypot(dn, de)))
+        self.gp += max(-60 * DT, min(60 * DT, want - self.gp))       # 雲台 60°/s
+        rid = int(now * 30)                                         # 30 Hz 辨識
+        cam = F_R_G2C @ ry(self.gp) @ rz(AC['chi'])
+        c = cam @ [dn, de, h]
+        ox = oy = float('nan')
+        ok = c[2] > 1
+        if ok:
+            ox = self.FX * c[0] / c[2] + random.gauss(0, 3)
+            oy = self.FY * c[1] / c[2] + random.gauss(0, 3)
+            ok = abs(ox) < self.W / 2 and abs(oy) < self.H / 2 and random.random() < 0.95
+        self.stats['frames'] = rid
+        return {'rx_mono': now - 0.01, 'result_id': rid, 'ver': 7, 'valid': bool(ok),
+                'target_cx': self.W / 2 + ox, 'target_cy': self.H / 2 + oy,
+                'offset_x': ox if ok else 0.0, 'offset_y': oy if ok else 0.0,
+                'fx': self.FX, 'fy': self.FY, 'cx': self.W / 2, 'cy': self.H / 2,
+                'image_width': self.W, 'image_height': self.H,
+                'pitch': self.gp + random.gauss(0, 0.1), 'roll': random.gauss(0, 0.2),
+                'mode': self.mode, 'detection_age_ms': 30.0, 'angle_age_ms': 5.0,
+                'e2e_ms': 80.0, 'e2e_err_ms': 2.0, 'cap_mono': now - 0.08}
+
+import numpy as _np
+F_R_G2C = _np.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]], dtype=float)
+def ry(d):
+    c, s_ = math.cos(math.radians(d)), math.sin(math.radians(d))
+    return _np.array([[c, 0, -s_], [0, 1, 0], [s_, 0, c]])
+def rz(d):
+    c, s_ = math.cos(math.radians(d)), math.sin(math.radians(d))
+    return _np.array([[c, s_, 0], [-s_, c, 0], [0, 0, 1]])
+if VIS:
+    import xwing_uart_vision
+    xwing_uart_vision.UartVisionLink = FakeVision
+case = ('plottest2' if TWO else 'plottest') + ('_gimbal' if VIS else '')
+sys.argv = ['x', '--moving', '--case', case] + ([] if VIS else ['--no-vision'])
 F.main()
 f = sorted(glob.glob(os.path.join(REPO, 'flight_logs', f'*{case}_events.txt')))[-1]
 c = f.replace('_events.txt', '.csv')
@@ -145,16 +222,15 @@ def fmt_msg(typ, name, fmt, cols):
     length = 3 + struct.calcsize('<' + ''.join({'Q':'Q','B':'B','I':'I','H':'H','L':'i','f':'f'}[x] for x in fmt))
     return b'\xa3\x95\x80' + struct.pack('<BB4s16s64s', typ, length, name.encode(), fmt.encode(), cols.encode())
 buf = fmt_msg(130, 'GPS', 'QBBIHLLf', 'TimeUS,I,Status,GMS,GWk,Lat,Lng,Spd')
-lead = -4.0   # 車子比虛擬目標晚出發 4 s
 for k in range(int(130 * 5)):
     tt = k * 0.2
     unix = GPS0 - 20 + tt
     gps_s = unix - 315964800 + 18
     wk = int(gps_s // 604800); ms = int(round((gps_s - wk * 604800) * 1000))
-    tm = tt - 20 - 2.0 + lead       # 相對 GUIDED 時刻
+    tm = tt - 20 - 2.0 + CAR_LEAD   # 相對 GUIDED 時刻
     spd = 0 if tm < 0 else min(10.0, 10.0 * tm / 7.0)
-    dist = 0 if tm < 0 else (5 / 7.0 * tm * tm if tm < 7 else 35 + 10 * (tm - 7))
-    n = 10 - dist + random.gauss(0, 0.6); e = 1.5 + random.gauss(0, 0.6)
+    n, e = car_ne(tt - 20)
+    n += random.gauss(0, 0.6); e += random.gauss(0, 0.6)
     la, lo = ne2gps(n, e)
     buf += b'\xa3\x95' + struct.pack('<BQBBIHiif', 130, int(tt * 1e6), 0, 3, ms, wk,
                                        int(round(la * 1e7)), int(round(lo * 1e7)), spd + random.gauss(0, 0.15))

@@ -1,0 +1,36 @@
+X-wing 實飛畫圖 最簡流程          詳細: PLOT_STEPS.txt / PLOT_GUIDE.md
+
+【今晚 (只做一次)】
+1. GitHub 分支 claude/kind-clarke-r77kuq → Code → Download ZIP → 覆蓋筆電 x-wing_virtual
+2. 進 x-wing_virtual\xwing_plot → 路徑列輸入 cmd → Enter
+   python test_plot_report.py --vision
+   看到 [test] 完成 = OK
+
+【飛行時】
+啟動指令不要加 --no-vision (雲台資料才會記錄)
+落地後 Terminal 2 輸入 q + Enter
+
+【落地後】
+1. Orin 的 flight_logs 資料夾 → 隨身碟 → 覆蓋 x-wing_virtual\flight_logs
+     cp -r ~/catkin_ws/src/hsu_realflight_true/flight_logs /media/$USER/<隨身碟>/ && sync
+2. 車子 SD 卡 LOGS\ 當天的 .BIN → 放進 x-wing_virtual\xwing_plot\car_bin\
+   (沒有 car_bin 就新建; 沒有車子 BIN 也能畫, 只是少真車比較)
+3. 進 x-wing_virtual\xwing_plot → 路徑列輸入 cmd → Enter
+   python xwing_plot_report.py --all
+
+【看結果】 xwing_plot\plot_results\<log 檔名>\run1\
+   report.pdf    → 全部圖, 給老師看
+   summary.txt   → ⚠ = 要看的參數; 【雲台資料當控制命令】= 雲台能不能拿來控制
+
+【給老師看的順序】
+Fig 3  高度剖面 (整趟怎麼飛)         Fig 4  下滑角 (俯衝角對不對)
+Fig 1  影像誤差 (PID 追得好不好)     Fig 10 方向舵 (有沒有打滿)
+Fig 2  姿態 (飛控有沒有跟上命令)     Fig 6  空速
+Fig 5  雲台當控制 vs 實際命令         Fig 15 雲台 vs 真車 (雲台準不準)
+Fig 14 虛擬目標 vs 真車 (車子出發時機)
+
+【出錯時】
+找不到 log        → flight_logs 要在 x-wing_virtual\flight_logs (不是 xwing_plot 裡)
+can't open file   → cmd 要從 xwing_plot 資料夾開
+沒有 GUIDED 段    → 地面測試, 加 --full
+其他              → 整個畫面拍下來

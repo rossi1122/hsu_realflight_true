@@ -11,6 +11,8 @@ xwing_plot_report.py — xwing_virtual 實飛 log → 報告圖 + 自動檢查 (
   python3 xwing_plot_report.py --latest                       # flight_logs/ 裡最新的一份
   python3 xwing_plot_report.py flight_logs/xwing_virtual_20261030_xxxxxx_flight2_A.csv
   python3 xwing_plot_report.py <log.csv> --car-bin-dir car_bin   # 加畫 虛擬目標 vs 真車 GPS
+  python3 xwing_plot_report.py --all                          # flight_logs/ 裡每一份都畫
+  python3 xwing_plot_report.py <log1.csv> <log2.csv>          # 一次畫好幾份
   python3 xwing_plot_report.py <log.csv> --run 2              # 只畫第 2 趟
   python3 xwing_plot_report.py <log.csv> --full               # 不裁切, 畫整份 (地面測試用)
 
@@ -977,13 +979,42 @@ def make_report(log_path, run, outdir, args, bins):
             + '\n\n【events.txt (這趟)】\n' + '\n'.join(evl) + '\n')
     with open(p('summary.txt'), 'w', encoding='utf-8') as f:
         f.write(text)
-    return text
+    return text, [m for m, _, _ in R.segs]
+
+
+def plot_one(log, args, bins):
+    """畫一份 log 的每一趟; 回傳 [(趟, 輸出資料夾 或 None, 說明)]."""
+    print(f'[plot] log: {log}')
+    L = Log.load(log)
+    stem = os.path.splitext(os.path.basename(log))[0]
+    if args.full:
+        runs = [0]
+    else:
+        runs = [args.run] if args.run else runs_of(L)
+        if not runs:
+            print('[plot] 這份 log 沒有任何 GUIDED 段, 跳過 (地面測試請加 --full)')
+            return [(None, None, '沒有 GUIDED (地面測試請加 --full)')]
+    res = []
+    for r in runs:
+        od = os.path.join(args.outdir, stem, 'full' if args.full else f'run{r}')
+        try:
+            text, modes = make_report(log, r, od, args, bins)
+        except ValueError as exc:
+            print(f'[plot] 第 {r} 趟跳過: {exc}')
+            res.append((r, None, str(exc)))
+            continue
+        print('\n' + '=' * 78)
+        print(text)
+        print(f'[plot] 圖 → {od}')
+        res.append((r, od, ' → '.join(modes) or '(不在 GUIDED)'))
+    return res
 
 
 def main():
     ap = argparse.ArgumentParser(description='xwing_virtual 實飛 log → 報告圖 + 自動檢查')
-    ap.add_argument('log', nargs='?', help='xwing_virtual_*.csv (不給就要用 --latest)')
+    ap.add_argument('log', nargs='*', help='xwing_virtual_*.csv (可以一次給好幾份; 不給就要用 --latest / --all)')
     ap.add_argument('--latest', action='store_true', help='用 flight_logs/ 裡最新的 log')
+    ap.add_argument('--all', action='store_true', help='flight_logs/ 裡每一份 log 都畫')
     ap.add_argument('--log-dir', default=os.path.join(HERE, 'flight_logs'))
     ap.add_argument('--run', type=int, default=None, help='只畫第幾趟 (預設每一趟都畫)')
     ap.add_argument('--full', action='store_true', help='不分趟, 畫整份 log (地面測試)')
@@ -993,17 +1024,22 @@ def main():
     ap.add_argument('--car-bin', action='append', default=[], help='直接指定車子 BIN (可多次)')
     args = ap.parse_args()
 
-    if args.latest or not args.log:
-        if not args.latest:
-            ap.error('請給 log 檔, 或加 --latest')
-        args.log = pick_latest(args.log_dir)
-    if not os.path.isfile(args.log):
-        cand = os.path.join(args.log_dir, args.log)
-        if os.path.isfile(cand):
-            args.log = cand
-        else:
-            sys.exit(f'[plot] 找不到 {args.log}')
-    print(f'[plot] log: {args.log}')
+    logs = []
+    if args.all:
+        logs = sorted(glob.glob(os.path.join(args.log_dir, 'xwing_virtual_*.csv')))
+        if not logs:
+            sys.exit(f'[plot] {args.log_dir} 裡沒有 xwing_virtual_*.csv')
+    elif args.latest:
+        logs = [pick_latest(args.log_dir)]
+    elif not args.log:
+        ap.error('請給 log 檔, 或加 --latest / --all')
+    for lg in args.log:
+        if not os.path.isfile(lg):
+            cand = os.path.join(args.log_dir, lg)
+            if not os.path.isfile(cand):
+                sys.exit(f'[plot] 找不到 {lg}')
+            lg = cand
+        logs.append(lg)
 
     bins = []
     if args.car_bin_dir or args.car_bin:
@@ -1012,24 +1048,14 @@ def main():
         if not bins:
             print('[plot] ⚠ 沒有可用的車子 BIN, 不畫 Fig 11')
 
-    L = Log.load(args.log)
-    stem = os.path.splitext(os.path.basename(args.log))[0]
-    if args.full:
-        runs = [0]
-    else:
-        runs = [args.run] if args.run else runs_of(L)
-        if not runs:
-            sys.exit('[plot] 這份 log 沒有任何 GUIDED 段 (地面測試請加 --full)')
-    for r in runs:
-        od = os.path.join(args.outdir, stem, 'full' if args.full else f'run{r}')
-        try:
-            text = make_report(args.log, r, od, args, bins)
-        except ValueError as exc:
-            print(f'[plot] 第 {r} 趟跳過: {exc}')
-            continue
-        print('\n' + '=' * 78)
-        print(text)
-        print(f'[plot] 圖 → {od}')
+    done = [(lg, plot_one(lg, args, bins)) for lg in logs]
+    if len(logs) > 1:
+        print('\n' + '=' * 78 + f'\n[plot] 總表 ({len(logs)} 份 log)')
+        for lg, res in done:
+            print(f'  {os.path.basename(lg)}')
+            for r, od, msg in res:
+                tag = '-' if r is None else f'run{r}'
+                print(f'      {tag:<6s} {msg}' + (f'\n             → {od}' if od else ''))
 
 
 if __name__ == '__main__':

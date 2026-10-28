@@ -55,9 +55,14 @@ X-wing 飛完畫圖 — 在筆電 (Windows) 上的執行步驟
    加真車比較:
    python xwing_plot_report.py --latest --car-bin-dir car_bin
 
-   一天有好幾份 log → 先看檔名, 再一份一份畫:
-   dir flight_logs
-   python xwing_plot_report.py flight_logs\xwing_virtual_XXXXXXXX_XXXXXX_flight1.csv --car-bin-dir car_bin
+   ★ 一天有好幾份 log → 全部一次畫 (最簡單):
+   python xwing_plot_report.py --all --car-bin-dir car_bin
+     flight_logs 裡每一份都畫, 最後印「總表」: 每份 log 的每一趟飛到哪個模式、圖在哪
+     沒切 GUIDED 的 (地面測試) 會自動跳過
+
+   只畫指定的幾份 (先 dir flight_logs 看檔名, 可以一次給好幾個):
+   python xwing_plot_report.py flight_logs\xwing_virtual_XXXXXXXX_XXXXXX_flight1.csv flight_logs\xwing_virtual_XXXXXXXX_XXXXXX_flight2.csv --car-bin-dir car_bin
+     小技巧: 打 flight_logs\xw 之後按 Tab 會自動補完檔名, 多按幾次 Tab 換下一個
 
    其他選項:
    --run 2     只畫第 2 趟 (同一份 log 切了好幾次 GUIDED)

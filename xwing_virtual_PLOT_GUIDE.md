@@ -51,6 +51,12 @@ ls -lt flight_logs/ | head
 python3 xwing_plot_report.py flight_logs/xwing_virtual_20261030_XXXXXX_flight1.csv
 ```
 
+**一天有好幾份 log：全部一次畫**
+```bash
+python3 xwing_plot_report.py --all                    # flight_logs/ 每一份都畫, 最後印總表
+python3 xwing_plot_report.py <log1.csv> <log2.csv>    # 只畫指定的幾份
+```
+
 **(2) 加上真車 GPS 比較（Fig 11）**
 1. 車子飛控的 SD 卡 → `LOGS/` 裡當天的 `.BIN`，複製到專案底下的 `car_bin/` 資料夾（只放**當天**的就好，程式會用 GPS 時間自己挑對的那一個）。
 2. 執行：

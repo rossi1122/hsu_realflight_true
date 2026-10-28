@@ -322,50 +322,104 @@ def fig1_overview(R, path, title, pdf):
     _save(fig, path, pdf)
 
 
+def _target_dir(R):
+    """虛擬目標的移動方向 (單位向量 n, e); 靜止目標用飛機 PRE_DIVE/DIVE 的平均航跡."""
+    L = R.L
+    g = R.mode != ''
+    tn, te = L.num('tgt_n')[g], L.num('tgt_e')[g]
+    ok = np.isfinite(tn) & np.isfinite(te)
+    if ok.sum() > 2:
+        dn, de = tn[ok][-1] - tn[ok][0], te[ok][-1] - te[ok][0]
+        if math.hypot(dn, de) > 1.0:
+            return dn / math.hypot(dn, de), de / math.hypot(dn, de)
+    k = R.m('PRE_DIVE', 'DIVE')
+    vn, ve = nanmean(L.num('vn')[k]), nanmean(L.num('ve')[k])
+    if np.isfinite(vn) and math.hypot(vn, ve) > 1.0:
+        return vn / math.hypot(vn, ve), ve / math.hypot(vn, ve)
+    return -1.0, 0.0
+
+
 def fig2_profile(R, path, title, pdf):
     L, t = R.L, R.t
     a0, a1 = R.window(4.0, 4.0)
     w = (t >= a0) & (t <= a1)
-    fig, ax = plt.subplots(1, 2, figsize=(13, 5.2), layout='constrained',
-                           gridspec_kw=dict(width_ratios=[1.4, 1]))
-    gd, agl = L.num('ground_m'), L.num('agl')
+    fig = plt.figure(figsize=(13, 9.5), layout='constrained')
+    gs = fig.add_gridspec(2, 2, height_ratios=[1.15, 1])
+    ax0 = fig.add_subplot(gs[0, :])
+    ax1 = fig.add_subplot(gs[1, 0])
+    ax2 = fig.add_subplot(gs[1, 1])
+    agl = L.num('agl')
+    th = math.tan(math.radians(C('DIVE_ANGLE_DEG')))
+    marks = [m for m in ('PRE_DIVE', 'DIVE', 'PULLOUT', 'ABORT') if m in R.first]
+
+    # (a) 地面座標側視: 橫軸 = 沿目標行進方向的距離 (0 = 虛擬起點), 目標畫在地面上
+    ux, uy = _target_dir(R)
+    s_ac = L.num('ac_n') * ux + L.num('ac_e') * uy
+    s_tg = L.num('tgt_n') * ux + L.num('tgt_e') * uy
     for m, c in MODE_COLOR.items():
         k = w & (R.mode == m)
         if k.any():
-            ax[0].plot(gd[k], agl[k], '.', ms=2.5, color=c, label=m)
-    th = math.tan(math.radians(C('DIVE_ANGLE_DEG')))
+            ax0.plot(s_ac[k], agl[k], '.', ms=2.5, color=c, label=f'aircraft {m}')
+    g = w & (R.mode != '')
+    if g.any():
+        ax0.plot(s_tg[g], np.zeros(g.sum()), color=C_TGT, lw=3, alpha=.5, label='virtual target (ground)')
+    if 'PRE_DIVE' in R.first:
+        i = np.argmin(np.abs(t - R.first['PRE_DIVE']))
+        xs = np.linspace(s_ac[i], s_ac[i] + agl[i] / th, 50)
+        ax0.plot(xs, agl[i] - (xs - s_ac[i]) * th, color=C_REF, ls='--', lw=1,
+                 label=f'{C("DIVE_ANGLE_DEG"):g}° line from push-over point')
+    for j, m in enumerate(marks):
+        i = np.argmin(np.abs(t - R.first[m]))
+        if np.isfinite(s_ac[i]) and np.isfinite(s_tg[i]):
+            ax0.plot(s_ac[i], agl[i], 'o', mfc='none', mec='k')
+            ax0.plot(s_tg[i], 0, 's', mfc='none', mec=C_TGT, ms=7)
+            ax0.plot([s_ac[i], s_tg[i]], [agl[i], 0], color='#999999', lw=.7, ls=':')
+            ax0.annotate(f'{m} t={t[i]:.1f}s\nAGL {agl[i]:.0f} m, to target {L.num("ground_m")[i]:.0f} m',
+                         (s_ac[i], agl[i]), textcoords='offset points', fontsize=7,
+                         xytext=(8, 8) if j % 2 == 0 else (8, -28))
+    ax0.axhline(C('PULLOUT_AGL_M'), color=C_CMD, ls=':', lw=.8, label='pullout AGL')
+    ax0.axhline(C('ABORT_MIN_AGL_M'), color=C_CMD, ls='-.', lw=.8, label='abort AGL')
+    ax0.set(xlabel='Distance along target heading from virtual start (m)', ylabel='AGL (m)',
+            title='(a) Side view, ground frame  (○ aircraft, □ target at the same instant, dotted = line of sight)')
+    top = nanmax(agl[w]) if w.any() else C('CRUISE_AGL_M')
+    ax0.set_ylim(-10, max(top, C('CRUISE_AGL_M')) * 1.18)
+    ax0.legend(fontsize=7, loc='upper right', ncol=2)
+
+    # (b) 相對移動目標: 目標往前跑, 所以看起來比實際陡
+    gd = L.num('ground_m')
+    for m, c in MODE_COLOR.items():
+        k = w & (R.mode == m)
+        if k.any():
+            ax1.plot(gd[k], agl[k], '.', ms=2.5, color=c)
     xs = np.linspace(0, C('CRUISE_AGL_M') / th, 50)
-    ax[0].plot(xs, xs * th, color=C_REF, ls='--', lw=1, label=f'design {C("DIVE_ANGLE_DEG"):g}° line')
-    ax[0].axhline(C('PULLOUT_AGL_M'), color=C_CMD, ls=':', lw=.8, label='pullout AGL')
-    ax[0].axhline(C('ABORT_MIN_AGL_M'), color=C_CMD, ls='-.', lw=.8, label='abort AGL')
-    for j, m in enumerate(('PRE_DIVE', 'DIVE', 'PULLOUT', 'ABORT')):
-        if m in R.first:
-            i = np.argmin(np.abs(t - R.first[m]))
-            if np.isfinite(gd[i]):
-                ax[0].plot(gd[i], agl[i], 'o', mfc='none', mec='k')
-                ax[0].annotate(f'{m}\n{gd[i]:.0f} m / {agl[i]:.0f} m', (gd[i], agl[i]),
-                               textcoords='offset points', fontsize=7,
-                               xytext=(-70, -26) if j % 2 == 0 else (8, 6))
-    ax[0].set(xlabel='Ground distance to (moving) target (m)', ylabel='AGL (m)',
-              title='(a) Distance–altitude profile')
-    ax[0].invert_xaxis()
-    ax[0].set_ylim(bottom=0)
-    ax[0].legend(fontsize=7, loc='lower right')
+    ax1.plot(xs, xs * th, color=C_REF, ls='--', lw=1, label=f'{C("DIVE_ANGLE_DEG"):g}° to target')
+    ax1.axhline(C('PULLOUT_AGL_M'), color=C_CMD, ls=':', lw=.8)
+    for m in marks:
+        i = np.argmin(np.abs(t - R.first[m]))
+        if np.isfinite(gd[i]):
+            ax1.plot(gd[i], agl[i], 'o', mfc='none', mec='k')
+    ax1.set(xlabel='Ground distance to the moving target (m)', ylabel='AGL (m)',
+            title='(b) Relative to the moving target\n(target runs ahead → looks steeper than γ)')
+    ax1.invert_xaxis()
+    ax1.set_ylim(bottom=0)
+    ax1.legend(fontsize=7, loc='lower right')
+
     gam, the = L.num('gamma_deg'), L.num('theta_deg')
-    ax[1].plot(t[w], gam[w], color='#2CA02C', label='γ flight path angle')
-    ax[1].plot(t[w], the[w], color=C_ACT, lw=.9, label='θ pitch')
-    ax[1].plot(t[w], L.num('pitch_cmd')[w], color=C_CMD, lw=.9, ls='--', label='pitch cmd')
-    ax[1].axhline(-C('DIVE_ANGLE_DEG'), color=C_REF, ls=':', lw=1)
-    shade_modes(ax[1], R.segs)
-    ax[1].set_xlim(a0, a1)
-    ax[1].set(xlabel='Time from GUIDED (s)', ylabel='deg', title='(b) γ / θ during dive')
+    ax2.plot(t[w], gam[w], color='#2CA02C', label='γ flight path angle')
+    ax2.plot(t[w], the[w], color=C_ACT, lw=.9, label='θ pitch')
+    ax2.plot(t[w], (L.num('pitch_cmd') * np.where(R.mode != '', 1.0, np.nan))[w], color=C_CMD,
+             lw=.9, ls='--', label='pitch cmd')
+    ax2.axhline(-C('DIVE_ANGLE_DEG'), color=C_REF, ls=':', lw=1)
+    shade_modes(ax2, R.segs)
+    ax2.set_xlim(a0, a1)
+    ax2.set(xlabel='Time from GUIDED (s)', ylabel='deg', title='(c) γ / θ during dive')
     d = R.m('DIVE')
     if d.any():
-        stat_box(ax[1], f'DIVE mean γ  {nanmean(gam[d]):6.1f}°\n'
-                        f'design      {-C("DIVE_ANGLE_DEG"):6.1f}°\n'
-                        f'γ err RMSE  {rmse(gam[d] + C("DIVE_ANGLE_DEG")):6.1f}°', 'lower left')
-    ax[1].legend(fontsize=7, loc='upper right')
-    for a in ax:
+        stat_box(ax2, f'DIVE mean γ  {nanmean(gam[d]):6.1f}°\n'
+                      f'design      {-C("DIVE_ANGLE_DEG"):6.1f}°\n'
+                      f'γ err RMSE  {rmse(gam[d] + C("DIVE_ANGLE_DEG")):6.1f}°', 'lower left')
+    ax2.legend(fontsize=7, loc='upper right')
+    for a in (ax0, ax1, ax2):
         a.grid(alpha=.25)
     fig.suptitle(f'Fig 2  Dive profile — {title}', fontsize=11, x=.02, ha='left')
     _save(fig, path, pdf)

@@ -94,7 +94,7 @@ plot_results/<log 檔名>/run1/
 | 圖 | 內容 | 不對勁時看的參數 |
 |---|---|---|
 | Fig 1 總覽 | AGL（240 / 200 / 120 / 100 m 參考線）、空速（60 上限）、pitch 命令 vs 實際、到目標距離、油門 | 整體流程有沒有照設計走 |
-| Fig 2 俯衝剖面 | (a) 距離–高度，對照設計 30° 線，標出 PRE_DIVE / DIVE / PULLOUT 點；(b) 航跡角 γ、θ | `DIVE_ANGLE_DEG`、`ALPHA_DIVE_DEG`、撥 GUIDED 的高度/距離 |
+| Fig 2 俯衝剖面 | (a) **地面座標側視**：飛機實際飛的高度 vs 沿目標方向的距離，對照從推頭點畫的 30° 線，目標畫在地面上（□），虛線是當下的視線；(b) **相對移動目標**的距離–高度（目標往前跑，所以看起來比實際陡，不是飛錯）；(c) 航跡角 γ、θ | `DIVE_ANGLE_DEG`、`ALPHA_DIVE_DEG`、撥 GUIDED 的高度/距離 |
 | Fig 3 姿態追蹤 | pitch 命令 vs 實際（RMSE）、heading 命令 vs 實際、roll（25/35° roll 保護線） | 飛控 pitch 迴路（pitch 追不上 → 先調飛控，不是加 PID）、`GUIDED_P`（SEARCH 轉向）、`ROLL_PROT_*` |
 | Fig 4 影像誤差 | DIVE 中虛擬目標在畫面上的橫向 / 縱向誤差（deg），右邊是目標在畫面上的軌跡 | `PID_LAT_KP/KI`、`PID_LON_KP/KI/KD` |
 | Fig 5 PID 各項 | DIVE 中 P / I / D 各自的大小與輸出 | 哪一項主導；I 一直累積 = 有固定偏差 |

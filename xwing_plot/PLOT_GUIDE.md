@@ -1,7 +1,7 @@
 # xwing_virtual 飛完畫圖 — 使用說明
 
 飛完後一個指令出全部圖、一份 PDF，加上一份 `summary.txt`（時間線、各段數字、哪些參數可能要調）。
-參考學長 realflight_plot 的圖表配置（Fig 1~9、虛擬目標 vs 真車 GPS），改寫成讀 **xwing_virtual 的 log**。
+Fig 1~9 照學長 realflight_plot 的版面，Fig 10~15 是 X-wing 才有的診斷圖，改寫成讀 **xwing_virtual 的 log**。
 
 畫圖相關的檔案全部放在專案的 **`xwing_plot/`** 資料夾，指令都在這個資料夾裡執行：
 
@@ -9,7 +9,7 @@
 hsu_realflight_true/          (筆電上叫 x-wing_virtual)
   flight_logs/                ← 飛機 log (飛行程式寫在這; 筆電上把 Orin 的拷過來放這)
   xwing_virtual_config.py     ← 畫圖會讀這裡的參數 (所以要拷整個專案)
-  dive_guidance.py ...        ← Fig 12 重放用
+  dive_guidance.py ...        ← Fig 5 / Fig 15 重放用
   xwing_plot/
     xwing_plot_report.py      主程式
     xwing_plot_target_gps.py  虛擬目標 vs 真車 (主程式會自動呼叫, 也可單獨跑)
@@ -22,7 +22,7 @@ hsu_realflight_true/          (筆電上叫 x-wing_virtual)
 
 | 程式 | 對應學長的 | 做什麼 |
 |---|---|---|
-| `xwing_plot_report.py` | `plot_flight_report*.py` / `plot_moving_report*.py` | 主報告：Fig 1~12 + report.pdf + summary.txt |
+| `xwing_plot_report.py` | `plot_flight_report*.py` / `plot_moving_report*.py` | 主報告：Fig 1~15 + report.pdf + summary.txt |
 | `xwing_plot_target_gps.py` | `plot_target_gps_comparison.py` | 虛擬目標 vs 真車 GPS（BIN），可單獨跑 |
 
 學長原本那幾支**不能直接讀 X-wing 的 log**：它們需要 `_vision.csv`（機上 YOLO）、`real_*` / `real_comp_pid_*` 欄位、`_raw.mp4`（`redetect_yolo.py`），X-wing 這版沒有 YOLO 也沒錄影，所以沒有放進來。
@@ -53,7 +53,7 @@ python3 xwing_plot_report.py --latest       # 只畫最新那份
 python3 xwing_plot_report.py <檔名.csv> ...  # 只畫指定的 (只給檔名, 會去 flight_logs 找)
 ```
 
-**真車比較（Fig 11、Fig 12 綠線）**：車子飛控 SD 卡 `LOGS/` 裡**當天**的 `.BIN` 放進 `xwing_plot/car_bin/`，就會**自動**比對（程式用 GPS 時間自己挑對的那一個）。不要比對就加 `--no-car`；BIN 放在別的地方用 `--car-bin-dir <資料夾>`。
+**真車比較（Fig 3、Fig 14、Fig 15）**：車子飛控 SD 卡 `LOGS/` 裡**當天**的 `.BIN` 放進 `xwing_plot/car_bin/`，就會**自動**比對（程式用 GPS 時間自己挑對的那一個）。不要比對就加 `--no-car`；BIN 放在別的地方用 `--car-bin-dir <資料夾>`。
 
 其他選項：
 ```bash
@@ -83,18 +83,24 @@ xwing_plot/plot_results/<log 檔名>/run1/
 
 | 圖 | 內容 | 不對勁時看的參數 |
 |---|---|---|
-| Fig 1 總覽 | AGL（240 / 200 / 120 / 100 m 參考線）、空速（60 上限）、pitch 命令 vs 實際、到目標距離、油門 | 整體流程有沒有照設計走 |
-| Fig 2 俯衝剖面 | (a) **地面座標側視**：飛機實際飛的高度 vs 沿目標方向的距離，對照從推頭點畫的 30° 線，目標畫在地面上（□），虛線是當下的視線；(b) **相對移動目標**的距離–高度（目標往前跑，所以看起來比實際陡，不是飛錯）；(c) 航跡角 γ、θ | `DIVE_ANGLE_DEG`、`ALPHA_DIVE_DEG`、撥 GUIDED 的高度/距離 |
-| Fig 3 姿態追蹤 | pitch 命令 vs 實際（RMSE）、heading 命令 vs 實際、roll（25/35° roll 保護線） | 飛控 pitch 迴路（pitch 追不上 → 先調飛控，不是加 PID）、`GUIDED_P`（SEARCH 轉向）、`ROLL_PROT_*` |
-| Fig 4 影像誤差 | DIVE 中虛擬目標在畫面上的橫向 / 縱向誤差（deg），右邊是目標在畫面上的軌跡 | `PID_LAT_KP/KI`、`PID_LON_KP/KI/KD` |
-| Fig 5 PID 各項 | DIVE 中 P / I / D 各自的大小與輸出 | 哪一項主導；I 一直累積 = 有固定偏差 |
-| Fig 6 方向舵 | raw / cmd / sent、±限幅、被空速或 roll 限制的區間、偏航角速度 r | `K_LAT_TO_RUDDER`、`RUDDER_LIMIT_DEG`、`RUDDER_SLEW_DPS`、`ROLL_PROT_*` |
-| Fig 7 軌跡 | 俯視圖：飛機（依模式上色）vs 虛擬目標；(b) DIVE 放大（東西向放大看側偏） | 進場方向、推頭時側偏多少 |
-| Fig 8 預測落點 | DIVE 中依當下速度直線外推的落點誤差（沿航跡 / 側向） | 側向收斂 = 方向舵在作用；沿航跡 = 俯衝角 / 拉平時機 |
-| Fig 9 雲台 UART | 連線、偵測、模式鍵（要求 vs 回報）、雲台 pitch（−30° 鎖定線）、相機誤差 vs 虛擬誤差 | 雲台有沒有在 PRE_DIVE 鎖到 −30°；沒接雲台就不出這張 |
-| Fig 10 系統 | 電壓、控制迴路週期（20 ms = 50 Hz）、nz | Orin 有沒有卡頓、電池 |
-| Fig 11 真車 GPS | 同一時刻虛擬目標 vs 真車的位置差、車速 vs 10 m/s | 車子何時出發 / 停的位置、`TARGET_SPEED_MPS`、撥 GUIDED 時機 |
-| Fig 12 雲台當控制輸入 | 把雲台量到的目標轉到虛擬相機，離線丟進同一套 DivePID，算出「用雲台資料控制會下的命令」跟實際命令比較（DIVE 有雲台資料才有） | 見下面第 5.1 節 |
+| **Fig 1~9：照學長 realflight_plot 的版面（論文用）** | | |
+| Fig 1 影像誤差 | DIVE 中虛擬目標的橫向 / 縱向誤差，單位「半個畫面 %」（±100 % = 畫面邊緣） | `PID_LAT_KP/KI`、`PID_LON_KP/KI/KD` |
+| Fig 2 姿態 | pitch 命令 vs 實際、航向（相對進 DIVE 時的固定方位）、roll vs 飛控 roll 目標 | 飛控 pitch 迴路（追不上 → 先調飛控）、`GUIDED_P`、`ROLL_PROT_*` |
+| Fig 3 高度剖面 | (a) AGL vs 時間；(b) 慣性座標側視（0 = 進 DIVE 時的目標，目標往右跑），理想 30° 線、DIVE 結束 pitch 延伸線、有車子 BIN 時加真車；(c) DIVE 中飛機到目標（和真車）的水平距離 | `DIVE_ANGLE_DEG`、撥 GUIDED 的高度 / 距離 |
+| Fig 4 下滑角 | 航跡角 γ vs 理想 −30°、下滑角誤差 | `ALPHA_DIVE_DEG`、pitch 追蹤 |
+| Fig 4b 雲台偵測率 | 各階段雲台偵測率長條圖（有雲台才有） | 雲台 / 對方辨識 |
+| Fig 5 PID 重放 | 同一套 PID：虛擬目標 vs 雲台資料的輸入誤差、重算的航向 / pitch 命令（DIVE 有雲台資料才有） | 見第 5.1 節 |
+| Fig 6 空速 | 空速 + 各階段平均線與統計表 | `PULLOUT_VMAX_MPS`、`THR_MIN` |
+| Fig 7 控制迴路誤差 | DIVE 中影像誤差 → 姿態追蹤誤差 | 哪一段迴路跟不上 |
+| Fig 8 雲台姿態 | 雲台 pitch / roll / 模式（有雲台才有） | 有沒有在 PRE_DIVE 鎖到 −30° |
+| Fig 9 DIVE 軌跡 | DIVE 飛機與目標俯視軌跡（目標方向 = Y 軸，每秒畫機頭箭頭） | 推頭時側偏、方向舵修正 |
+| **Fig 10~15：X-wing 才有的診斷圖** | | |
+| Fig 10 方向舵 | raw / cmd / sent、±限幅、被空速或 roll 限制的區間、偏航角速度 | `K_LAT_TO_RUDDER`、`RUDDER_LIMIT_DEG`、`RUDDER_SLEW_DPS`、`ROLL_PROT_*` |
+| Fig 11 PID 各項 | DIVE 中 P / I / D 各自的大小與輸出 | 哪一項主導；I 一直累積 = 有固定偏差 |
+| Fig 12 預測落點 | DIVE 中依當下速度直線外推的落點誤差 | 側向收斂 = 方向舵在作用 |
+| Fig 13 系統 | 電壓、控制迴路週期（20 ms = 50 Hz） | Orin 卡頓、電池 |
+| Fig 14 真車 GPS | 同一時刻虛擬目標 vs 真車的位置差、車速 vs 10 m/s（car_bin 有 BIN 才有） | 車子出發時機、撥 GUIDED 時機 |
+| Fig 15 雲台 vs 真車 | 雲台 / 虛擬 / 真車三者拆解、偵測與延遲（DIVE 有雲台資料才有） | 雲台量得準不準（見第 5.1 節） |
 
 ---
 
@@ -116,9 +122,9 @@ xwing_plot/plot_results/<log 檔名>/run1/
 | 電壓 | 讀到 ≈ 0 V 超過 5 % | 第二顆電池監測沒接 |
 | 雲台 | UART 連線 < 95 %；PRE_DIVE 後一直沒鎖定到位 | 線材、對方程式 |
 
-這些只是**根據 log 的提示**，判斷前還是要看圖。數字和圖要一起看，例如「影像誤差一直偏」要再看 Fig 6 方向舵是不是已經打滿。
+這些只是**根據 log 的提示**，判斷前還是要看圖。數字和圖要一起看，例如「影像誤差一直偏」要再看 Fig 10 方向舵是不是已經打滿。
 
-### 5.1 Fig 12：雲台資料能不能當控制命令
+### 5.1 Fig 5 / Fig 15：雲台資料能不能當控制命令
 
 **做法**
 1. 雲台模型：pitch / roll **相對地面**（自穩），yaw 跟機頭（沒有 yaw 軸）。
@@ -127,7 +133,7 @@ xwing_plot/plot_results/<log 檔名>/run1/
 4. 同時用「虛擬量測」再重跑一次當**重放檢查**：這條應該跟實際命令完全重合（差 < 0.5°），代表重放是對的。
 5. 有車子 BIN 時，再用真車 GPS 算「車子理論上在虛擬畫面的哪裡」（綠虛線），把差異拆成兩部分：
    - **雲台 − 真車**＝雲台本身量得準不準（偏差、跳動、延遲、座標假設）
-   - **真車 − 虛擬目標**＝車子沒有開在虛擬軌跡上（跟 Fig 11 同一件事）
+   - **真車 − 虛擬目標**＝車子沒有開在虛擬軌跡上（跟 Fig 14 同一件事）
 
 **圖（由上到下）**：橫向偏移、縱向偏移（藍＝虛擬，橘點＝雲台，綠虛線＝真車）、pitch 命令、方向舵命令、雲台偵測與影像延遲。
 
@@ -153,11 +159,11 @@ xwing_plot/plot_results/<log 檔名>/run1/
 ## 6. 常見狀況
 
 - **Orin 時鐘是 1970**：檔名會是 `19700101_...`，但不影響畫圖。對真車用的是飛控的 GPS 時間（`gps_unix` 欄位），不是 Orin 的時鐘。所以每趟請用不同的 `--case`，才分得出是哪一趟。
-- **Fig 11 沒畫**：`summary.txt` 會寫原因，常見的是：
+- **Fig 14 沒畫**：`summary.txt` 會寫原因，常見的是：
   - BIN 沒有涵蓋 PRE_DIVE~DIVE 的時間（拿錯天、車子飛控沒錄到）；
   - 資料夾裡有兩個 BIN 都涵蓋（只留當天那個）；
   - 這趟沒有進 DIVE。
-- **Fig 11 的「北向差」**：目標往南開，北向差為正 = 車子在虛擬目標**後面**（車子出發晚了）。
+- **Fig 14 的「北向差」**：目標往南開，北向差為正 = 車子在虛擬目標**後面**（車子出發晚了）。
 - **只想單獨比對真車**：
   ```bash
   python3 xwing_plot_target_gps.py ../flight_logs/<log>.csv      (BIN 放 car_bin/)

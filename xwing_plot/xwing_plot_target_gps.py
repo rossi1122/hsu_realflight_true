@@ -300,7 +300,7 @@ def compare(d, run, bins, out_prefix, max_gap=2.0, after=10.0, leap_seconds=GPS_
     fig.legend(handles=[Patch(facecolor='gold', alpha=.16, label='PRE_DIVE'),
                         Patch(facecolor='tab:green', alpha=.12, label='DIVE')],
                loc='upper left', bbox_to_anchor=(.865, .84), frameon=False, fontsize=11)
-    fig.suptitle(f"{title or ''}  run {run}  vs  {os.path.basename(bin_path)}\n"
+    fig.suptitle(f"Fig 14  Virtual target vs real car GPS — {title or ''}  run {run}  vs  {os.path.basename(bin_path)}\n"
                  f"GPS UTC alignment | DIVE {taiwan_time(t_dive0)} ~ "
                  f"{taiwan_time(t_dive1).split(' ')[-1]} (Taiwan time)", fontsize=11)
     fig.savefig(out_prefix + '.png', dpi=150)
@@ -381,7 +381,7 @@ def main():
         od = os.path.join(outdir, f'run{r}')
         os.makedirs(od, exist_ok=True)
         try:
-            lines, _ = compare(d, r, bins, os.path.join(od, 'fig11_target_gps'), a.max_gap,
+            lines, _ = compare(d, r, bins, os.path.join(od, 'fig14_target_gps'), a.max_gap,
                                a.after, a.leap_seconds, title=stem)
             okn += 1
             print(f'\n[OK] 第 {r} 趟 → {od}')

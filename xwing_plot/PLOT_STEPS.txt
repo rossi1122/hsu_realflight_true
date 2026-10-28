@@ -79,29 +79,31 @@ X-wing 飛完畫圖 — 在筆電 (Windows) 上的執行步驟
    report.pdf     ← 全部的圖, 直接開給老師看
    summary.txt    ← 時間線 + 數字 + 自動檢查
                     ✓ 正常   ⚠ 建議看的參數   ✗ 有問題
-   fig1 ~ fig12   ← 單張圖 (要放投影片用這些)
+   fig1 ~ fig15   ← 單張圖 (要放投影片用這些)
    切了幾次 GUIDED 就有幾個資料夾: run1, run2, ...
 
 
 ==================================================================
  C. 圖在看什麼 (時間 0 = 撥 GUIDED)
 ==================================================================
-Fig 1  總覽: 高度 / 空速 / pitch / 到目標距離 / 油門
-Fig 2  俯衝剖面: (a) 地面座標側視 (看實際俯衝角, 對照 30° 線)
-       (b) 相對移動目標 (目標往前跑, 看起來會比較陡, 正常)  (c) 航跡角
-Fig 3  姿態: pitch、heading 命令 vs 實際, roll
-Fig 4  影像誤差 (DIVE): 橫向 / 縱向            → PID_LAT / PID_LON
-Fig 5  PID 各項 P / I / D
-Fig 6  方向舵: 舵量、限幅、被 roll 保護限制     → K_LAT_TO_RUDDER、ROLL_PROT
-Fig 7  軌跡: 飛機 vs 虛擬目標 (俯視)
-Fig 8  預測落點誤差 (DIVE)
-Fig 9  雲台 UART (有接雲台才有)
-Fig 10 電壓、控制迴路 50 Hz
-Fig 11 虛擬目標 vs 真車 GPS (car_bin 有 BIN 才有)
-Fig 12 雲台資料當控制命令 (DIVE 有雲台資料才有): 把雲台量到的目標丟進同一套 PID 重算,
-       跟實際命令比較; summary.txt 的【雲台資料當控制命令】段落有判斷
-       ※ car_bin 要有車子 BIN, 才分得出「雲台不準」還是「車子不在虛擬位置」
-       顏色: 藍 = 實際控制 (虛擬目標)  橘 = 雲台  綠虛線 = 真車 GPS
+── Fig 1~9: 照學長的版面 (論文用) ──
+Fig 1  影像誤差 (DIVE, 半個畫面 %)                 → PID_LAT / PID_LON
+Fig 2  姿態: pitch、航向 (相對進 DIVE 方位)、roll
+Fig 3  高度剖面: (a) 高度 vs 時間 (b) 慣性座標側視 + 理想 30° 線 (c) 到目標距離
+Fig 4  下滑角: γ vs −30°、誤差               Fig 4b 雲台偵測率長條圖 (有雲台)
+Fig 5  PID 重放: 虛擬目標 vs 雲台資料, 重算的航向 / pitch 命令 (有雲台)
+Fig 6  空速 + 各階段統計表
+Fig 7  控制迴路誤差
+Fig 8  雲台 pitch / roll / 模式 (有雲台)
+Fig 9  DIVE 俯視軌跡
+── Fig 10~15: X-wing 才有的診斷圖 ──
+Fig 10 方向舵: 舵量、限幅、被 roll 保護限制     → K_LAT_TO_RUDDER、ROLL_PROT
+Fig 11 PID 各項 P / I / D
+Fig 12 預測落點誤差 (DIVE)
+Fig 13 電壓、控制迴路 50 Hz
+Fig 14 虛擬目標 vs 真車 GPS (car_bin 有 BIN 才有)
+Fig 15 雲台 vs 虛擬 vs 真車 拆解 (有雲台; car_bin 有 BIN 才分得出誤差來源)
+       summary.txt 的【雲台資料當控制命令】段落有判斷
 
 
 ==================================================================
@@ -118,6 +120,6 @@ can't open file 'xwing_plot_report.py'
     → 命令列不在 xwing_plot 資料夾: 重新從 xwing_plot 的路徑列輸入 cmd
 這份 log 沒有任何 GUIDED 段
     → 地面測試 / 沒切 GUIDED: 加 --full
-Fig 11 沒畫 (summary.txt 會寫原因)
+Fig 14 沒畫 (summary.txt 會寫原因)
     → car_bin 放錯天的 BIN / 放了兩個都涵蓋的 BIN / 那一趟沒進 DIVE
 其他錯誤 → 把整個畫面拍下來

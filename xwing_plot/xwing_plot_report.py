@@ -17,20 +17,26 @@ xwing_plot_report.py — xwing_virtual 實飛 log → 報告圖 + 自動檢查 (
   python3 xwing_plot_report.py <log.csv> --full               # 不裁切, 畫整份 (地面測試用)
 
 輸出: xwing_plot/plot_results/<log 檔名>/run<N>/
-  fig1_overview.png          模式 / AGL / 空速 / pitch / 油門 時間歷程
-  fig2_dive_profile.png      距離–高度剖面 (對照設計 30° 線) + 航跡角 γ
-  fig3_attitude.png          pitch / heading 命令 vs 實際, roll (含 roll 保護線)
-  fig4_image_error.png       虛擬畫面誤差 (橫向 / 縱向) + 畫面上的目標軌跡
-  fig5_pid_terms.png         DIVE 段 PID 各項 (P / I / D / 輸出)
-  fig6_rudder.png            方向舵 raw / cmd / sent, 限幅, 偏航角速度
-  fig7_trajectory.png        俯視圖: 飛機 vs 虛擬目標
-  fig8_miss.png              預測落點誤差 (沿航跡 / 側向)
-  fig9_gimbal.png            雲台 UART (有接雲台才有): 連線、模式、pitch、偵測
-  fig10_system.png           電壓、控制迴路週期
-  fig11_target_gps.png       (有給 BIN) 虛擬目標 vs 真車 GPS
-  fig12_gimbal_replay.png    (DIVE 有雲台資料) 雲台資料當控制輸入: 離線重放 PID, 跟實際命令比較
-  report.pdf                 上面全部合成一份
-  summary.txt                時間線 + 各段數字 + 自動檢查 (⚠ = 建議看的參數)
+  Fig 1~9 照學長 realflight_plot 的版面 (論文用):
+  fig1_image_error.png            影像平面誤差 (% of half-frame), DIVE
+  fig2_attitude.png               pitch / 航向 (相對固定方位) / roll, 命令 vs 實際
+  fig3_altitude_profile.png       (a) AGL vs 時間 (b) 慣性座標剖面 (c) DIVE 中與目標距離
+  fig4_glide_slope.png            航跡角 vs 理想下滑角
+  fig4b_gimbal_detection_rate.png 各階段雲台偵測率 (有雲台才有)
+  fig5_pid_replay_gimbal.png      同一套 PID: 虛擬目標 vs 雲台資料 (DIVE 有雲台資料才有)
+  fig6_airspeed.png               空速 + 各階段統計表
+  fig7_control_loop_error.png     DIVE 控制迴路誤差 (影像 → 姿態追蹤)
+  fig8_gimbal_attitude.png        雲台 pitch / roll / 模式 (有雲台才有)
+  fig9_dive_trajectory.png        DIVE 飛機與目標軌跡 (目標方向 = Y 軸, 每秒機頭箭頭)
+  X-wing 才有的診斷圖:
+  fig10_rudder.png                方向舵 raw / cmd / sent, 限幅, 偏航角速度
+  fig11_pid_terms.png             DIVE 段 PID 各項
+  fig12_predicted_miss.png        預測落點誤差
+  fig13_system.png                電壓、控制迴路週期
+  fig14_target_gps.png            (car_bin 有 BIN) 虛擬目標 vs 真車 GPS
+  fig15_gimbal_vs_car.png         (DIVE 有雲台資料) 雲台 vs 虛擬 vs 真車 拆解, 偵測與延遲
+  report.pdf                      上面全部合成一份
+  summary.txt                     時間線 + 數字 + 自動檢查 (⚠ = 建議看的參數)
 """
 import argparse
 import csv
@@ -75,8 +81,8 @@ def C(name):
     return DEFAULTS[name]
 
 
-MODE_COLOR = {'SEARCH': '#4A90E2', 'PRE_DIVE': '#F5A623', 'DIVE': '#2CA02C',
-              'PULLOUT': '#9467BD', 'DONE': '#9B9B9B', 'ABORT': '#D0021B'}
+MODE_COLOR = {'SEARCH': '#4A90E2', 'PRE_DIVE': '#F5A623', 'DIVE': '#E4572E',     # 跟學長圖同色
+              'PULLOUT': '#8E44AD', 'DONE': '#95A5A6', 'ABORT': '#D0021B'}
 C_CMD, C_ACT, C_REF = '#D0021B', '#1F4E79', '#555555'
 C_TGT = '#D0021B'
 
@@ -284,262 +290,6 @@ def _save(fig, path, pdf):
     plt.close(fig)
 
 
-def fig1_overview(R, path, title, pdf):
-    L, t = R.L, R.t
-    fig, ax = plt.subplots(5, 1, figsize=(12, 11), sharex=True, layout='constrained')
-    agl = L.num('agl')
-    ax[0].plot(t, agl, color=C_ACT, label='AGL')
-    for y, lab, st in ((C('CRUISE_AGL_M'), 'cruise', ':'), (C('ENTRY_MIN_AGL_M'), 'entry min', '--'),
-                       (C('PULLOUT_AGL_M'), 'pullout', '--'), (C('ABORT_MIN_AGL_M'), 'abort', '-.')):
-        ax[0].axhline(y, color=C_REF, ls=st, lw=.8)
-        ax[0].text(t[0], y, f' {lab} {y:g} m', fontsize=7, va='bottom', color=C_REF)
-    ax[0].set_ylabel('AGL (m)')
-    V = L.num('V')
-    ax[1].plot(t, V, color=C_ACT, label='Airspeed')
-    ax[1].axhline(C('PULLOUT_VMAX_MPS'), color=C_CMD, ls='--', lw=.8, label=f'Vmax {C("PULLOUT_VMAX_MPS"):g}')
-    ax[1].axhline(C('V_CRUISE_MPS'), color=C_REF, ls=':', lw=.8, label=f'cruise {C("V_CRUISE_MPS"):g}')
-    ax[1].set_ylabel('Airspeed (m/s)')
-    ax[1].legend(fontsize=8, loc='upper left')
-    ax[2].plot(t, L.num('pitch_cmd') * np.where(R.mode != '', 1.0, np.nan), color=C_CMD, lw=1.2,
-               label='pitch cmd')
-    ax[2].plot(t, L.num('theta_deg'), color=C_ACT, lw=1.2, label='pitch')
-    ax[2].plot(t, L.num('gamma_deg'), color='#2CA02C', lw=.9, ls='--', label='γ (flight path)')
-    ax[2].axhline(-C('DIVE_ANGLE_DEG'), color=C_REF, ls=':', lw=.8)
-    ax[2].set_ylabel('deg')
-    ax[2].legend(fontsize=8, loc='lower left', ncol=3)
-    ax[3].plot(t, L.num('ground_m'), color=C_ACT, label='ground dist to target')
-    ax[3].plot(t, L.num('slant_m'), color='#7F7F7F', lw=.9, label='slant range')
-    ax[3].axhline(nanmean(L.num('predive_dist_m')), color=C_REF, ls='--', lw=.8, label='push-over dist')
-    ax[3].set_ylabel('Distance (m)')
-    ax[3].legend(fontsize=8, loc='upper right')
-    ax[4].plot(t, L.num('throttle'), color='#8C564B', label='throttle')
-    ax[4].set_ylabel('Throttle')
-    ax[4].set_xlabel('Time from GUIDED (s)')
-    for a in ax:
-        shade_modes(a, R.segs)
-        a.grid(alpha=.25)
-    fig.suptitle(f'Fig 1  Mission overview — {title}', fontsize=11, x=.02, ha='left')
-    mode_legend(fig, R.segs)
-    _save(fig, path, pdf)
-
-
-def _target_dir(R):
-    """虛擬目標的移動方向 (單位向量 n, e); 靜止目標用飛機 PRE_DIVE/DIVE 的平均航跡."""
-    L = R.L
-    g = R.mode != ''
-    tn, te = L.num('tgt_n')[g], L.num('tgt_e')[g]
-    ok = np.isfinite(tn) & np.isfinite(te)
-    if ok.sum() > 2:
-        dn, de = tn[ok][-1] - tn[ok][0], te[ok][-1] - te[ok][0]
-        if math.hypot(dn, de) > 1.0:
-            return dn / math.hypot(dn, de), de / math.hypot(dn, de)
-    k = R.m('PRE_DIVE', 'DIVE')
-    vn, ve = nanmean(L.num('vn')[k]), nanmean(L.num('ve')[k])
-    if np.isfinite(vn) and math.hypot(vn, ve) > 1.0:
-        return vn / math.hypot(vn, ve), ve / math.hypot(vn, ve)
-    return -1.0, 0.0
-
-
-def fig2_profile(R, path, title, pdf):
-    L, t = R.L, R.t
-    a0, a1 = R.window(4.0, 4.0)
-    w = (t >= a0) & (t <= a1)
-    fig = plt.figure(figsize=(13, 9.5), layout='constrained')
-    gs = fig.add_gridspec(2, 2, height_ratios=[1.15, 1])
-    ax0 = fig.add_subplot(gs[0, :])
-    ax1 = fig.add_subplot(gs[1, 0])
-    ax2 = fig.add_subplot(gs[1, 1])
-    agl = L.num('agl')
-    th = math.tan(math.radians(C('DIVE_ANGLE_DEG')))
-    marks = [m for m in ('PRE_DIVE', 'DIVE', 'PULLOUT', 'ABORT') if m in R.first]
-
-    # (a) 地面座標側視: 橫軸 = 沿目標行進方向的距離 (0 = 虛擬起點), 目標畫在地面上
-    ux, uy = _target_dir(R)
-    s_ac = L.num('ac_n') * ux + L.num('ac_e') * uy
-    s_tg = L.num('tgt_n') * ux + L.num('tgt_e') * uy
-    for m, c in MODE_COLOR.items():
-        k = w & (R.mode == m)
-        if k.any():
-            ax0.plot(s_ac[k], agl[k], '.', ms=2.5, color=c, label=f'aircraft {m}')
-    g = w & (R.mode != '')
-    if g.any():
-        ax0.plot(s_tg[g], np.zeros(g.sum()), color=C_TGT, lw=3, alpha=.5, label='virtual target (ground)')
-    if 'PRE_DIVE' in R.first:
-        i = np.argmin(np.abs(t - R.first['PRE_DIVE']))
-        xs = np.linspace(s_ac[i], s_ac[i] + agl[i] / th, 50)
-        ax0.plot(xs, agl[i] - (xs - s_ac[i]) * th, color=C_REF, ls='--', lw=1,
-                 label=f'{C("DIVE_ANGLE_DEG"):g}° line from push-over point')
-    for j, m in enumerate(marks):
-        i = np.argmin(np.abs(t - R.first[m]))
-        if np.isfinite(s_ac[i]) and np.isfinite(s_tg[i]):
-            ax0.plot(s_ac[i], agl[i], 'o', mfc='none', mec='k')
-            ax0.plot(s_tg[i], 0, 's', mfc='none', mec=C_TGT, ms=7)
-            ax0.plot([s_ac[i], s_tg[i]], [agl[i], 0], color='#999999', lw=.7, ls=':')
-            ax0.annotate(f'{m} t={t[i]:.1f}s\nAGL {agl[i]:.0f} m, to target {L.num("ground_m")[i]:.0f} m',
-                         (s_ac[i], agl[i]), textcoords='offset points', fontsize=7,
-                         xytext=(8, 8) if j % 2 == 0 else (8, -28))
-    ax0.axhline(C('PULLOUT_AGL_M'), color=C_CMD, ls=':', lw=.8, label='pullout AGL')
-    ax0.axhline(C('ABORT_MIN_AGL_M'), color=C_CMD, ls='-.', lw=.8, label='abort AGL')
-    ax0.set(xlabel='Distance along target heading from virtual start (m)', ylabel='AGL (m)',
-            title='(a) Side view, ground frame  (○ aircraft, □ target at the same instant, dotted = line of sight)')
-    top = nanmax(agl[w]) if w.any() else C('CRUISE_AGL_M')
-    ax0.set_ylim(-10, max(top, C('CRUISE_AGL_M')) * 1.18)
-    ax0.legend(fontsize=7, loc='upper right', ncol=2)
-
-    # (b) 相對移動目標: 目標往前跑, 所以看起來比實際陡
-    gd = L.num('ground_m')
-    for m, c in MODE_COLOR.items():
-        k = w & (R.mode == m)
-        if k.any():
-            ax1.plot(gd[k], agl[k], '.', ms=2.5, color=c)
-    xs = np.linspace(0, C('CRUISE_AGL_M') / th, 50)
-    ax1.plot(xs, xs * th, color=C_REF, ls='--', lw=1, label=f'{C("DIVE_ANGLE_DEG"):g}° to target')
-    ax1.axhline(C('PULLOUT_AGL_M'), color=C_CMD, ls=':', lw=.8)
-    for m in marks:
-        i = np.argmin(np.abs(t - R.first[m]))
-        if np.isfinite(gd[i]):
-            ax1.plot(gd[i], agl[i], 'o', mfc='none', mec='k')
-    ax1.set(xlabel='Ground distance to the moving target (m)', ylabel='AGL (m)',
-            title='(b) Relative to the moving target\n(target runs ahead → looks steeper than γ)')
-    ax1.invert_xaxis()
-    ax1.set_ylim(bottom=0)
-    ax1.legend(fontsize=7, loc='lower right')
-
-    gam, the = L.num('gamma_deg'), L.num('theta_deg')
-    ax2.plot(t[w], gam[w], color='#2CA02C', label='γ flight path angle')
-    ax2.plot(t[w], the[w], color=C_ACT, lw=.9, label='θ pitch')
-    ax2.plot(t[w], (L.num('pitch_cmd') * np.where(R.mode != '', 1.0, np.nan))[w], color=C_CMD,
-             lw=.9, ls='--', label='pitch cmd')
-    ax2.axhline(-C('DIVE_ANGLE_DEG'), color=C_REF, ls=':', lw=1)
-    shade_modes(ax2, R.segs)
-    ax2.set_xlim(a0, a1)
-    ax2.set(xlabel='Time from GUIDED (s)', ylabel='deg', title='(c) γ / θ during dive')
-    d = R.m('DIVE')
-    if d.any():
-        stat_box(ax2, f'DIVE mean γ  {nanmean(gam[d]):6.1f}°\n'
-                      f'design      {-C("DIVE_ANGLE_DEG"):6.1f}°\n'
-                      f'γ err RMSE  {rmse(gam[d] + C("DIVE_ANGLE_DEG")):6.1f}°', 'lower left')
-    ax2.legend(fontsize=7, loc='upper right')
-    for a in (ax0, ax1, ax2):
-        a.grid(alpha=.25)
-    fig.suptitle(f'Fig 2  Dive profile — {title}', fontsize=11, x=.02, ha='left')
-    _save(fig, path, pdf)
-
-
-def fig3_attitude(R, path, title, pdf, st):
-    L, t = R.L, R.t
-    gm = np.where(R.mode != '', 1.0, np.nan)      # 命令只在 GUIDED 中有意義
-    fig, ax = plt.subplots(3, 1, figsize=(12, 9), sharex=True, layout='constrained')
-    pc, th = L.num('pitch_cmd') * gm, L.num('theta_deg')
-    ax[0].plot(t, pc, color=C_CMD, label='pitch cmd (companion)')
-    if L.has('fc_pitch_tgt_deg'):
-        ax[0].plot(t, L.num('fc_pitch_tgt_deg'), color='#FF9896', lw=.8, label='FC pitch target')
-    ax[0].plot(t, th, color=C_ACT, label='pitch actual')
-    ax[0].set_ylabel('Pitch (deg)')
-    dd = R.m('PRE_DIVE', 'DIVE')
-    if dd.any():
-        st['pitch_rmse_dive'] = rmse((pc - th)[R.m('DIVE')])
-        st['pitch_maxerr_dive'] = nanmax(np.abs(pc - th)[R.m('DIVE')])
-        stat_box(ax[0], f'PRE_DIVE+DIVE RMSE(cmd−act) {rmse((pc - th)[dd]):5.2f}°\n'
-                        f'DIVE RMSE {st["pitch_rmse_dive"]:5.2f}°  max {st["pitch_maxerr_dive"]:5.2f}°',
-                 'lower left')
-    hc = L.num('heading_cmd') * gm
-    hd = L.num('yaw_deg') if L.has('yaw_deg') else L.num('chi_deg')
-    base = hd[np.isfinite(hd)][0] if np.isfinite(hd).any() else 0
-    ax[1].plot(t, base + wrap180(hc - base), color=C_CMD, label='heading cmd')
-    ax[1].plot(t, base + wrap180(hd - base), color=C_ACT, label='heading')
-    if L.has('brg_hdg_want'):
-        ax[1].plot(t, base + wrap180(L.num('brg_hdg_want') - base), color='#FF9896', lw=.8,
-                   label='bridge hdg want')
-    ax[1].set_ylabel('Heading (deg)')
-    s = R.m('SEARCH')
-    if s.any():
-        he = wrap180(hc - hd)
-        st['hdg_err_search_end'] = nanmean(he[s & (t >= R.first.get('PRE_DIVE', t[-1]) - 2)
-                                              & (t < R.first.get('PRE_DIVE', t[-1]))])
-        stat_box(ax[1], f'SEARCH hdg err RMSE {rmse(he[s]):5.1f}°\n'
-                        f'last 2 s before PRE_DIVE {f1(st["hdg_err_search_end"])}°', 'lower left')
-    roll = L.num('roll_deg')
-    ax[2].plot(t, roll, color=C_ACT, label='roll')
-    for y, st_ in ((C('ROLL_PROT_FULL_DEG'), '--'), (C('ROLL_PROT_ZERO_DEG'), ':')):
-        ax[2].axhline(y, color=C_CMD, ls=st_, lw=.8)
-        ax[2].axhline(-y, color=C_CMD, ls=st_, lw=.8)
-    ax[2].set_ylabel('Roll (deg)')
-    ax[2].set_xlabel('Time from GUIDED (s)')
-    d = R.m('DIVE')
-    if d.any():
-        st['roll_max_dive'] = nanmax(np.abs(roll[d]))
-        stat_box(ax[2], f'DIVE max |roll| {st["roll_max_dive"]:5.1f}°\n'
-                        f'roll prot {C("ROLL_PROT_FULL_DEG"):g}/{C("ROLL_PROT_ZERO_DEG"):g}°', 'lower left')
-    for a in ax:
-        shade_modes(a, R.segs)
-        a.grid(alpha=.25)
-        a.legend(fontsize=8, loc='upper right')
-    fig.suptitle(f'Fig 3  Attitude tracking — {title}', fontsize=11, x=.02, ha='left')
-    mode_legend(fig, R.segs)
-    _save(fig, path, pdf)
-
-
-def fig4_image(R, path, title, pdf, st):
-    L, t = R.L, R.t
-    a0, a1 = R.window(3.0, 1.0)
-    w = (t >= a0) & (t <= a1)
-    d = R.m('DIVE')
-    dn = np.where(d, 1.0, np.nan)        # 虛擬畫面只在 DIVE 投影, 其他段固定在畫面中心
-    u, v = L.num('virt_bbox_u') * dn, L.num('virt_bbox_v') * dn
-    eu = np.degrees(np.arctan((u - C('CX_1X')) / C('FX_1X')))
-    ev = np.degrees(np.arctan((v - C('CY_1X')) / C('FY_1X')))
-    pu, pv = L.num('pid_u_err_deg') * dn, L.num('pid_v_err_deg') * dn
-    fig = plt.figure(figsize=(13, 7.5), layout='constrained')
-    gs = fig.add_gridspec(2, 2, width_ratios=[1.5, 1])
-    a = fig.add_subplot(gs[0, 0])
-    b = fig.add_subplot(gs[1, 0], sharex=a)
-    c = fig.add_subplot(gs[:, 1])
-    for ax_, e_bb, e_pid, lab in ((a, eu, pu, 'Lateral (u, +right)'), (b, ev, pv, 'Vertical (v, +down)')):
-        ax_.plot(t[w], e_bb[w], color='#7F7F7F', lw=.9, label='target offset from image center')
-        ax_.plot(t[w], e_pid[w], color=C_CMD, lw=1.4, label='PID error (vs setpoint)')
-        ax_.axhline(0, color='k', lw=.6)
-        ax_.set_ylabel(f'{lab}\n(deg)')
-        shade_modes(ax_, R.segs)
-        ax_.grid(alpha=.25)
-        ax_.legend(fontsize=8, loc='upper right')
-        ax_.set_xlim(a0, a1)
-    if d.any():
-        half = d & (t >= (R.first['DIVE'] + nanmax(t[d])) / 2)
-        st['u_rmse'] = rmse(pu[d])
-        st['v_rmse'] = rmse(pv[d])
-        st['u_mean_2nd'] = nanmean(pu[half])
-        st['v_mean_2nd'] = nanmean(pv[half])
-        st['u_final'] = float(pu[d][np.isfinite(pu[d])][-1]) if np.isfinite(pu[d]).any() else float('nan')
-        st['v_final'] = float(pv[d][np.isfinite(pv[d])][-1]) if np.isfinite(pv[d]).any() else float('nan')
-        st['u_osc_hz'] = _osc_rate(t[d], pu[d])
-        st['v_osc_hz'] = _osc_rate(t[d], pv[d])
-        stat_box(a, f'DIVE RMSE {st["u_rmse"]:5.2f}°  2nd-half mean {st["u_mean_2nd"]:+5.2f}°\n'
-                    f'final {st["u_final"]:+5.2f}°  zero-cross {st["u_osc_hz"]:.2f} Hz', 'lower left')
-        stat_box(b, f'DIVE RMSE {st["v_rmse"]:5.2f}°  2nd-half mean {st["v_mean_2nd"]:+5.2f}°\n'
-                    f'final {st["v_final"]:+5.2f}°  zero-cross {st["v_osc_hz"]:.2f} Hz', 'lower left')
-    b.set_xlabel('Time from GUIDED (s)')
-    W, H = C('IMG_W'), C('IMG_H')
-    c.add_patch(plt.Rectangle((0, 0), W, H, fill=False, ec='k'))
-    c.plot([W / 2], [H / 2], '+', color='k', ms=14)
-    k = w & np.isfinite(u)
-    if k.any():
-        sc = c.scatter(u[k], v[k], c=t[k], s=6, cmap='viridis')
-        fig.colorbar(sc, ax=c, label='Time from GUIDED (s)', shrink=.7)
-        if L.has('virt_u_sp'):
-            c.plot(L.num('virt_u_sp')[k & d], L.num('virt_v_sp')[k & d], '.', ms=2,
-                   color=C_CMD, label='PID setpoint')
-            c.legend(fontsize=8, loc='lower right')
-    c.set_xlim(-50, W + 50)
-    c.set_ylim(H + 50, -50)
-    c.set_aspect('equal')
-    c.set(xlabel='u (px)', ylabel='v (px)', title='Virtual target in image (control frame 1x)')
-    a.set_title('Virtual image error (DIVE only — projection is active only in DIVE)')
-    fig.suptitle(f'Fig 4  Image-plane error — {title}', fontsize=11, x=.02, ha='left')
-    mode_legend(fig, R.segs)
-    _save(fig, path, pdf)
-
-
 def _osc_rate(t, e, dead=0.3):
     """|e| > dead 的過零次數 / 秒 (大略代表擺盪頻率 ×2)."""
     ok = np.isfinite(e) & (np.abs(e) > dead)
@@ -571,7 +321,7 @@ def fig5_pid(R, path, title, pdf):
         a.legend(fontsize=8, loc='upper right', ncol=4)
         a.set_xlim(a0, a1)
     ax[1].set_xlabel('Time from GUIDED (s)')
-    fig.suptitle(f'Fig 5  DIVE PID terms — {title}', fontsize=11, x=.02, ha='left')
+    fig.suptitle(f'Fig 11  DIVE PID terms — {title}', fontsize=11, x=.02, ha='left')
     mode_legend(fig, R.segs)
     _save(fig, path, pdf)
 
@@ -621,51 +371,8 @@ def fig6_rudder(R, path, title, pdf, st):
         a.grid(alpha=.25)
         a.legend(fontsize=8, loc='upper right', ncol=3)
         a.set_xlim(a0, a1)
-    fig.suptitle(f'Fig 6  Rudder loop (DIVE) — {title}', fontsize=11, x=.02, ha='left')
+    fig.suptitle(f'Fig 10  Rudder loop (DIVE) — {title}', fontsize=11, x=.02, ha='left')
     mode_legend(fig, R.segs)
-    _save(fig, path, pdf)
-
-
-def fig7_traj(R, path, title, pdf):
-    L, t = R.L, R.t
-    fig, axs = plt.subplots(1, 2, figsize=(14, 8.5), layout='constrained',
-                            gridspec_kw=dict(width_ratios=[1, 1.15]))
-    an, ae = L.num('ac_n'), L.num('ac_e')
-    tn, te = L.num('tgt_n'), L.num('tgt_e')
-    g = R.mode != ''
-    a0, a1 = R.window(2.0, 1.0)
-    for ax, zoom in ((axs[0], False), (axs[1], True)):
-        w = (t >= a0) & (t <= a1) if zoom else np.ones(len(t), bool)
-        if not zoom:
-            ax.plot(ae[~g], an[~g], color='#CCCCCC', lw=1, label='aircraft (not GUIDED)')
-        for m, c in MODE_COLOR.items():
-            k = w & (R.mode == m)
-            if k.any():
-                ax.plot(ae[k], an[k], '.', ms=2.5 if not zoom else 4, color=c, label=f'aircraft {m}')
-        ax.plot(te[g & w], tn[g & w], color=C_TGT, lw=2, ls='--', label='virtual target')
-        for m in ('PRE_DIVE', 'DIVE', 'PULLOUT', 'ABORT'):
-            if m in R.first:
-                i = np.argmin(np.abs(t - R.first[m]))
-                ax.plot(ae[i], an[i], 'o', mfc='none', mec='k', ms=8)
-                ax.plot(te[i], tn[i], 's', mfc='none', mec=C_TGT, ms=7)
-                ax.plot([ae[i], te[i]], [an[i], tn[i]], color='#999999', lw=.6, ls=':')
-                ax.annotate(f'{m} t={t[i]:.1f}s', (ae[i], an[i]), textcoords='offset points',
-                            xytext=(8, 4), fontsize=8)
-        ax.plot([0], [0], '*', color='k', ms=14, label='virtual start (origin)')
-        ax.set(xlabel='East (m)', ylabel='North (m)')
-        ax.grid(alpha=.25)
-        if zoom:
-            xs = np.r_[ae[w], te[g & w]]
-            xs = xs[np.isfinite(xs)]
-            if len(xs):
-                c0, span = (xs.max() + xs.min()) / 2, max(xs.max() - xs.min(), 20) * 0.6
-                ax.set_xlim(c0 - span, c0 + span)
-            ax.set_title('(b) PRE_DIVE → PULLOUT zoom  (East axis exaggerated, not to scale)')
-        else:
-            ax.set_aspect('equal', adjustable='datalim')
-            ax.set_title('(a) Top view (○ aircraft, □ target at the same instant)')
-            ax.legend(fontsize=8, loc='best')
-    fig.suptitle(f'Fig 7  Trajectory — {title}', fontsize=11, x=.02, ha='left')
     _save(fig, path, pdf)
 
 
@@ -697,61 +404,10 @@ def fig8_miss(R, path, title, pdf, st):
         a.grid(alpha=.25)
         a.legend(fontsize=8, loc='upper right')
         a.set_xlim(a0, a1)
-    fig.suptitle(f'Fig 8  Predicted miss in DIVE (straight-line extrapolation) — {title}',
+    fig.suptitle(f'Fig 12  Predicted miss in DIVE (straight-line extrapolation) — {title}',
                  fontsize=11, x=.02, ha='left')
     mode_legend(fig, R.segs)
     _save(fig, path, pdf)
-
-
-def fig9_gimbal(R, path, title, pdf, st):
-    L, t = R.L, R.t
-    if not (L.has('vis_link') or L.has('vis_frames')):
-        return False
-    fig, ax = plt.subplots(4, 1, figsize=(12, 10), sharex=True, layout='constrained')
-    link = L.num('vis_link')
-    ax[0].plot(t, link, color=C_ACT, drawstyle='steps-post', label='UART link')
-    ax[0].plot(t, L.num('vis_valid') * .9, color='#2CA02C', drawstyle='steps-post',
-               label='target detected (×0.9)')
-    ax[0].set_ylim(-.1, 1.2)
-    ax[0].set_ylabel('0 / 1')
-    gm = L.num('vis_gimbal_mode')
-    req = L.num('gimbal_mode_req')
-    ax[1].plot(t, gm, color=C_ACT, drawstyle='steps-post', label='gimbal mode (reported)')
-    ax[1].plot(t, req, color=C_CMD, ls='--', drawstyle='steps-post', label='mode requested')
-    ax[1].set_ylabel('Mode key')
-    gp = L.num('vis_gimbal_pitch')
-    ax[2].plot(t, gp, color=C_ACT, label='gimbal pitch')
-    ax[2].axhline(C('GIMBAL_LOCK_PITCH_DEG'), color=C_REF, ls='--', lw=.8, label='lock −30°')
-    ax[2].set_ylabel('Gimbal pitch (deg)')
-    ax[3].plot(t, L.num('vis_err_u_deg'), '.-', ms=3, lw=.8, color='#FF7F0E', label='camera err u (deg)')
-    ax[3].plot(t, L.num('vis_err_v_deg'), '.-', ms=3, lw=.8, color='#9467BD', label='camera err v (deg)')
-    dn = np.where(R.m('DIVE'), 1.0, np.nan)
-    ax[3].plot(t, L.num('pid_u_err_deg') * dn, color='#FF7F0E', ls=':', label='virtual PID err u')
-    ax[3].plot(t, L.num('pid_v_err_deg') * dn, color='#9467BD', ls=':', label='virtual PID err v')
-    ax[3].set_ylabel('deg')
-    ax[3].set_xlabel('Time from GUIDED (s)')
-    g = R.mode != ''
-    st['vis_link_pct'] = 100.0 * np.nanmean(link[g] > 0) if g.any() else float('nan')
-    for m in ('SEARCH', 'PRE_DIVE', 'DIVE'):
-        k = R.m(m) & (link > 0)
-        if k.any():
-            st[f'vis_det_{m}'] = 100.0 * np.nanmean(L.num('vis_valid')[k] > 0)
-    lk = L.num('gimbal_locked')
-    if 'PRE_DIVE' in R.first and np.isfinite(lk).any():
-        k = (t >= R.first['PRE_DIVE']) & (lk > 0)
-        st['gimbal_lock_s'] = float(t[k][0] - R.first['PRE_DIVE']) if k.any() else float('nan')
-    txt = f'link {f1(st["vis_link_pct"])} % of GUIDED\n' + '\n'.join(
-        f'det {m:<8s} {f1(st.get("vis_det_" + m))} %' for m in ('SEARCH', 'PRE_DIVE', 'DIVE'))
-    stat_box(ax[0], txt, 'lower left')
-    for a in ax:
-        shade_modes(a, R.segs)
-        a.grid(alpha=.25)
-        a.legend(fontsize=8, loc='upper right', ncol=2)
-    fig.suptitle(f'Fig 9  Gimbal UART (log only, not used for control) — {title}',
-                 fontsize=11, x=.02, ha='left')
-    mode_legend(fig, R.segs)
-    _save(fig, path, pdf)
-    return True
 
 
 def fig10_system(R, path, title, pdf, st):
@@ -780,9 +436,657 @@ def fig10_system(R, path, title, pdf, st):
         shade_modes(a, R.segs)
         a.grid(alpha=.25)
         a.legend(fontsize=8, loc='upper right')
-    fig.suptitle(f'Fig 10  System health — {title}', fontsize=11, x=.02, ha='left')
+    fig.suptitle(f'Fig 13  System health — {title}', fontsize=11, x=.02, ha='left')
     mode_legend(fig, R.segs)
     _save(fig, path, pdf)
+
+
+# ─────────────────────────── 論文圖 Fig 1~9 (照學長 realflight_plot 的版面) ───────────────────────────
+C_BLK = '#17202A'
+C_TRK = '#C0392B'
+C_VIR = '#1F77B4'      # 虛擬目標 (實際控制用)
+C_GIM = '#1E8449'      # 雲台 (補償後)
+C_CAR = '#8E6C3A'      # 真車 GPS
+
+
+def _dive_span(R):
+    """(DIVE 開始, DIVE 結束) 秒, 以撥 GUIDED 為 0; 沒有 DIVE 回傳 None."""
+    if 'DIVE' not in R.first:
+        return None
+    return R.first['DIVE'], float(np.nanmax(R.t[R.m('DIVE')]))
+
+
+def _guided_end(R):
+    g = R.mode != ''
+    return float(np.nanmax(R.t[g])) if g.any() else float(R.t[-1])
+
+
+def _bands(ax, R, shift=0.0, x0=None, x1=None, labels=False):
+    """模式底色 + 切換虛線; labels=True 時在上方寫模式名 (學長 Fig 3a 的樣子)."""
+    span = (x1 - x0) if (x0 is not None and x1 is not None) else None
+    for m, a, b in R.segs:
+        c = MODE_COLOR.get(m)
+        if not c:
+            continue
+        a, b = a - shift, b - shift
+        if (x1 is not None and a >= x1) or (x0 is not None and b <= x0):
+            continue
+        ax.axvspan(a, b, color=c, alpha=.16, lw=0)
+        if x0 is None or a > x0 + 1e-6:
+            ax.axvline(a, color=c, ls='--', lw=1.0)
+        if labels:
+            lo = a if x0 is None else max(a, x0)
+            hi = b if x1 is None else min(b, x1)
+            if span is None or (hi - lo) > 0.05 * span:
+                ax.text((lo + hi) / 2, .93, m, transform=ax.get_xaxis_transform(), ha='center',
+                        va='top', color=c, fontsize=9, fontweight='bold')
+
+
+def _band_legend(fig, R, extra=()):
+    seen = []
+    for m, _, _ in R.segs:
+        if m in MODE_COLOR and m not in seen:
+            seen.append(m)
+    h = [Patch(facecolor=MODE_COLOR[m], alpha=.35, label=m) for m in seen] + list(extra)
+    if h:
+        fig.legend(handles=h, loc='upper center', ncol=len(h), fontsize=9, frameon=False,
+                   bbox_to_anchor=(.5, .965))
+
+
+def _title(fig, n, text, title):
+    fig.suptitle(f'Fig {n}  {text} — {title}', fontsize=12, fontweight='bold')
+
+
+def _course(L):
+    vn, ve = L.num('vn'), L.num('ve')
+    c = np.degrees(np.arctan2(ve, vn))
+    yaw = L.num('yaw_deg') if L.has('yaw_deg') else L.num('chi_deg')
+    return np.where(np.isfinite(c) & (np.hypot(vn, ve) > 2.0), c, yaw)
+
+
+def _nice_lim(x, floor):
+    m = nanmax(np.abs(x))
+    if not np.isfinite(m):
+        return floor
+    m = max(floor, 1.1 * m)
+    step = 25 if m < 300 else 100
+    return math.ceil(m / step) * step
+
+
+def compute_stats(R, st):
+    """summary.txt 自動檢查用的數字 (跟畫哪張圖無關)."""
+    L, t = R.L, R.t
+    gm = np.where(R.mode != '', 1.0, np.nan)
+    pc, th = L.num('pitch_cmd') * gm, L.num('theta_deg')
+    d = R.m('DIVE')
+    if d.any():
+        st['pitch_rmse_dive'] = rmse((pc - th)[d])
+        st['pitch_maxerr_dive'] = nanmax(np.abs(pc - th)[d])
+        st['roll_max_dive'] = nanmax(np.abs(L.num('roll_deg')[d]))
+        pu, pv = L.num('pid_u_err_deg'), L.num('pid_v_err_deg')
+        half = d & (t >= (R.first['DIVE'] + nanmax(t[d])) / 2)
+        for k, e in (('u', pu), ('v', pv)):
+            st[f'{k}_rmse'] = rmse(e[d])
+            st[f'{k}_mean_2nd'] = nanmean(e[half])
+            fin = e[d][np.isfinite(e[d])]
+            st[f'{k}_final'] = float(fin[-1]) if len(fin) else float('nan')
+            st[f'{k}_osc_hz'] = _osc_rate(t[d], e[d])
+    s = R.m('SEARCH')
+    if s.any() and 'PRE_DIVE' in R.first:
+        hd = L.num('yaw_deg') if L.has('yaw_deg') else L.num('chi_deg')
+        he = wrap180(L.num('heading_cmd') * gm - hd)
+        tp = R.first['PRE_DIVE']
+        st['hdg_err_search_end'] = nanmean(he[s & (t >= tp - 2) & (t < tp)])
+    if L.has('vis_link') or L.has('vis_frames'):
+        link = L.num('vis_link')
+        g = R.mode != ''
+        st['vis_link_pct'] = 100.0 * np.nanmean(link[g] > 0) if g.any() else float('nan')
+        for m in ('SEARCH', 'PRE_DIVE', 'DIVE'):
+            k = R.m(m) & (link > 0)
+            if k.any():
+                st[f'vis_det_{m}'] = 100.0 * np.nanmean(L.num('vis_valid')[k] > 0)
+        lk = L.num('gimbal_locked')
+        if 'PRE_DIVE' in R.first and np.isfinite(lk).any():
+            k = (t >= R.first['PRE_DIVE']) & (lk > 0)
+            st['gimbal_lock_s'] = float(t[k][0] - R.first['PRE_DIVE']) if k.any() else float('nan')
+
+
+def figP1_image_error(R, path, title, pdf, gimb):
+    """Fig 1  影像平面誤差 (% of half-frame), t = 0 在 DIVE 進入."""
+    sp = _dive_span(R)
+    if sp is None:
+        return False
+    L = R.L
+    d = R.m('DIVE')
+    tt = R.t - sp[0]
+    W2, H2 = C('IMG_W') / 2.0, C('IMG_H') / 2.0
+    usp = np.where(np.isfinite(L.num('virt_u_sp')), L.num('virt_u_sp'), C('IMG_W') / 2.0)
+    vsp = np.where(np.isfinite(L.num('virt_v_sp')), L.num('virt_v_sp'), C('IMG_H') / 2.0)
+    eu = (L.num('virt_bbox_u') - usp) / W2 * 100
+    ev = (L.num('virt_bbox_v') - vsp) / H2 * 100
+    off = d & ((L.num('virt_detected') <= 0) | (np.abs(eu) > 100) | (np.abs(ev) > 100))
+    fig, ax = plt.subplots(2, 1, figsize=(10, 7), layout='constrained')
+    for a, e, ttl, sym, half, sp_ in ((ax[0], eu, '(a) Lateral image error', 'lateral error $e_u$', W2, usp),
+                                      (ax[1], ev, '(b) Longitudinal image error',
+                                       'longitudinal error $e_v$', H2, vsp)):
+        ge = None
+        if gimb is not None:
+            gx = gimb[0] if a is ax[0] else gimb[1]
+            ge = np.where(gimb[2] & d, (gx - sp_) / half * 100, np.nan)
+        lim = _nice_lim(np.r_[e[d], ge[d] if ge is not None else []], 120)
+        a.fill_between(tt, -lim, lim, where=off, color='#BBBBBB', alpha=.35, lw=0,
+                       label='virtual target off-frame')
+        a.axhline(100, color='#999999', lw=1, label='frame edge (±100 %)')
+        a.axhline(-100, color='#999999', lw=1)
+        a.axhline(0, color='#1E8449', ls='--', lw=1.2, label='image center (0 %)')
+        a.plot(tt[d], e[d], color=C_BLK, lw=1.7, label=sym + ' (virtual)')
+        box = f'DIVE RMSE = {rmse(e[d]):7.2f} %'
+        if ge is not None and np.isfinite(ge).any():
+            a.plot(tt, ge, '.', ms=3, color='#E67E22', label='gimbal (compensated)')
+            box += f'\ngimbal RMS = {rmse(ge):7.2f} %'
+        stat_box(a, box, 'upper right')
+        a.set_xlim(0, sp[1] - sp[0])
+        a.set_ylim(-lim, lim)
+        a.set_title(ttl, loc='left')
+        a.set(xlabel='t (s)   [ t = 0 at DIVE entry ]', ylabel='error (% of half-frame)')
+        a.grid(alpha=.25, ls=':')
+        a.legend(loc='upper left', ncol=3, fontsize=8)
+    _title(fig, 1, 'Image-plane error convergence', title)
+    _save(fig, path, pdf)
+    return True
+
+
+def figP2_attitude(R, path, title, pdf):
+    """Fig 2  Pitch / 航向 (相對固定參考) / Roll, t = 0 在撥 GUIDED (SEARCH 進入)."""
+    L, t = R.L, R.t
+    sp = _dive_span(R)
+    x0, x1 = 0.0, (sp[1] if sp else _guided_end(R))
+    w = (t >= x0) & (t <= x1)
+    d = R.m('DIVE')
+    fig, ax = plt.subplots(3, 1, figsize=(10.5, 10), layout='constrained')
+    th, pc = L.num('theta_deg'), L.num('pitch_cmd')
+    act = R.m('PRE_DIVE', 'DIVE', 'PULLOUT')
+    ax[0].plot(t[w], th[w], color=C_BLK, lw=1.7, label='actual')
+    ax[0].plot(t[w], np.where(act, pc, np.nan)[w], '--', color=C_TRK, lw=1.6, label='command')
+    if d.any():
+        stat_box(ax[0], f'DIVE tracking RMSE = {rmse((pc - th)[d]):5.2f} deg', 'upper right')
+    ax[0].set(ylabel='pitch (deg)')
+    ax[0].set_title(r'(a) Pitch $\theta$', loc='left')
+
+    # (b) 航向相對固定參考 = DIVE 進入時 飛機→虛擬目標 的方位 (沒有 DIVE 就用 PRE_DIVE / GUIDED 進入)
+    an, ae, tn, te = L.num('ac_n'), L.num('ac_e'), L.num('tgt_n'), L.num('tgt_e')
+    ref_at = 'DIVE entry' if 'DIVE' in R.first else ('PRE_DIVE entry' if 'PRE_DIVE' in R.first
+                                                     else 'GUIDED entry')
+    tr = R.first.get('DIVE', R.first.get('PRE_DIVE', 0.0))
+    i = int(np.argmin(np.abs(t - tr)))
+    ref = math.degrees(math.atan2(te[i] - ae[i], tn[i] - an[i])) % 360.0
+    hd = L.num('yaw_deg') if L.has('yaw_deg') else L.num('chi_deg')
+    ax[1].plot(t[w], wrap180(hd - ref)[w], color=C_BLK, lw=1.7, label='actual heading − fixed reference')
+    sc = R.m('SEARCH', 'PRE_DIVE')
+    ax[1].plot(t[w], np.where(sc, wrap180(L.num('heading_cmd') - ref), np.nan)[w], '--', color=C_TRK,
+               lw=1.5, label='SEARCH / PRE_DIVE: heading command − reference')
+    eu = L.num('pid_u_err_deg')
+    ax[1].plot(t[w], np.where(d, -eu, np.nan)[w], '--', color='#7B241C', lw=1.5,
+               label='DIVE: −pid_u_err_deg')
+    ax[1].axhline(0, color='#888888', lw=.8)
+    box = f'Reference = {ref:.3f} deg ({ref_at})'
+    if d.any():
+        box += f'\nDIVE image-error RMS = {rmse(eu[d]):.2f} deg'
+    stat_box(ax[1], box, 'lower right')
+    ax[1].set(ylabel='relative angle (deg)')
+    ax[1].set_title('(b) Heading relative to fixed aircraft-to-target bearing / image error', loc='left')
+
+    roll = L.num('roll_deg')
+    if L.has('fc_nav_roll_deg'):
+        rc, rlab = L.num('fc_nav_roll_deg'), 'FC roll target'
+    else:
+        rc, rlab = np.where(R.m('PRE_DIVE', 'DIVE'), 0.0, np.nan), 'command (roll = 0)'
+    ax[2].plot(t[w], roll[w], color=C_BLK, lw=1.7, label='actual')
+    ax[2].plot(t[w], rc[w], '--', color=C_TRK, lw=1.5, label=rlab)
+    for y in (C('ROLL_PROT_FULL_DEG'), -C('ROLL_PROT_FULL_DEG')):
+        ax[2].axhline(y, color='#BBBBBB', lw=.8, ls=':')
+    if d.any():
+        stat_box(ax[2], f'DIVE tracking RMSE = {rmse((rc - roll)[d]):5.2f} deg', 'upper right')
+    ax[2].set(ylabel='roll (deg)')
+    ax[2].set_title(r'(c) Roll $\phi$  (dotted = roll protection ±%g°)' % C('ROLL_PROT_FULL_DEG'),
+                    loc='left')
+    for a in ax:
+        _bands(a, R, x0=x0, x1=x1)
+        a.set_xlim(x0, x1)
+        a.set_xlabel('t (s)   [ t = 0 at GUIDED (SEARCH) entry ]')
+        a.grid(alpha=.25, ls=':')
+        a.legend(loc='upper left', fontsize=8, ncol=3)
+    _title(fig, 2, 'Attitude and lateral image error', title)
+    _band_legend(fig, R)
+    fig.get_layout_engine().set(rect=(0, 0, 1, .955))
+    _save(fig, path, pdf)
+
+
+def figP3_altitude(R, path, title, pdf, car):
+    """Fig 3  (a) AGL vs 時間; (b) 沿 DIVE 進入時視線的慣性座標剖面; (c) DIVE 中與目標的水平距離."""
+    L, t = R.L, R.t
+    sp = _dive_span(R)
+    agl = L.num('agl')
+    x1a = sp[1] if sp else _guided_end(R)
+    if sp is None:
+        fig, a0 = plt.subplots(1, 1, figsize=(10, 4), layout='constrained')
+        ax = [a0]
+    else:
+        fig, ax = plt.subplots(3, 1, figsize=(10, 12.5), layout='constrained',
+                               gridspec_kw=dict(height_ratios=[1, 1.35, .8]))
+    w = (t >= 0) & (t <= x1a)
+    ax[0].plot(t[w], agl[w], color=C_BLK, lw=1.8)
+    _bands(ax[0], R, x0=0, x1=x1a, labels=True)
+    ax[0].set_xlim(0, x1a)
+    ax[0].set(xlabel='t (s)   [ t = 0 at GUIDED (SEARCH) entry ]', ylabel='AGL (m)')
+    ax[0].set_title('(a) Altitude profile vs. time', loc='left')
+    ax[0].grid(alpha=.25, ls=':')
+    if sp is None:
+        _title(fig, 3, 'Altitude profile (no DIVE in this run)', title)
+        _save(fig, path, pdf)
+        return
+    d = R.m('DIVE')
+    an, ae, tn, te = L.num('ac_n'), L.num('ac_e'), L.num('tgt_n'), L.num('tgt_e')
+    i_d = int(np.where(d)[0][0])
+    i_e = int(np.where(d)[0][-1])
+    los = np.array([tn[i_d] - an[i_d], te[i_d] - ae[i_d]])
+    los = los / max(np.hypot(*los), 1e-6)
+    On, Oe = tn[i_d], te[i_d]
+    s_ac = (an - On) * los[0] + (ae - Oe) * los[1]
+    s_tg = (tn - On) * los[0] + (te - Oe) * los[1]
+    b = ax[1]
+    w3 = (t >= 0) & (t <= sp[1] + 4.0)
+    for m in ('SEARCH', 'PRE_DIVE', 'DIVE', 'PULLOUT', 'DONE', 'ABORT'):
+        k = w3 & (R.mode == m)
+        if k.any():
+            b.plot(s_ac[k], agl[k], color=MODE_COLOR[m], lw=2.4, label=m)
+    b.axhline(0, color='#8B7355', lw=1.5)
+    kd = np.where(d)[0]
+    sub = kd[::max(1, int(round(0.25 / max(np.nanmedian(np.diff(t[kd])), 1e-3))))]
+    b.plot(s_tg[kd], np.zeros(len(kd)), color='#E06C75', lw=3, alpha=.8, label='target ground track')
+    b.plot(s_tg[sub], np.zeros(len(sub)), 'o', color='#D0021B', ms=4)
+    b.plot(s_tg[i_d], 0, 'o', mfc='white', mec='#D0021B', mew=2, ms=10, label='target @ dive entry', zorder=5)
+    b.plot(s_tg[i_e], 0, 'o', color='#D0021B', mec='#7B0000', ms=11, label='target @ DIVE end', zorder=5)
+    ang = C('DIVE_ANGLE_DEG')
+    if 'PRE_DIVE' in R.first:
+        i_p = int(np.argmin(np.abs(t - R.first['PRE_DIVE'])))
+        b.plot(s_tg[i_p], 0, 'D', mfc='white', mec='#D0021B', mew=2, ms=10, label='target @ PRE_DIVE entry',
+               zorder=5)
+        b.plot(s_ac[i_p], agl[i_p], 'D', mfc='white', mec=MODE_COLOR['PRE_DIVE'], mew=2, ms=9, zorder=5)
+        b.plot([s_ac[i_p], s_tg[i_p]], [agl[i_p], 0], ':', color=MODE_COLOR['PRE_DIVE'], lw=1.3)
+        b.axvline(s_ac[i_p], color=MODE_COLOR['PRE_DIVE'], ls=':', lw=1.5)
+        xs = np.array([s_ac[i_p], s_ac[i_p] + agl[i_p] / math.tan(math.radians(ang))])
+        b.plot(xs, [agl[i_p], 0], '-.', color='#52A37A', lw=1.5,
+               label=f'ideal {ang:g}° (config) from PRE_DIVE entry')
+        b.annotate(f'{L.num("ground_m")[i_p]:.0f} m to target\n(PRE_DIVE entry)',
+                   (s_ac[i_p], 0), xycoords=('data', 'axes fraction'), xytext=(0, -22),
+                   textcoords='offset points', ha='center', va='top', color=MODE_COLOR['PRE_DIVE'],
+                   fontsize=9, fontweight='bold')
+    b.plot(s_ac[i_d], agl[i_d], 'o', mfc='white', mec=C_BLK, mew=2, ms=10, zorder=5)
+    b.plot(s_ac[i_e], agl[i_e], 's', mfc='white', mec='#1E8449', mew=2, ms=9, zorder=5)
+    th_e = L.num('theta_deg')[i_e]
+    if np.isfinite(th_e) and th_e < -1:
+        xh = s_ac[i_e] + agl[i_e] / math.tan(math.radians(-th_e))
+        b.plot([s_ac[i_e], xh], [agl[i_e], 0], '--', color='#1E8449', lw=2,
+               label=f'DIVE-end pitch {th_e:.1f}° extended')
+        b.plot(xh, 0, 'x', color='#1E8449', ms=12, mew=3, zorder=6)
+    car_d = None
+    if car is not None:
+        cn, ce = car
+        s_car = (cn - On) * los[0] + (ce - Oe) * los[1]
+        k = d & np.isfinite(s_car)
+        if k.any():
+            b.plot(s_car[k], np.zeros(k.sum()) + 1.5, color=C_CAR, lw=2.5, label='real car GPS (DIVE)')
+            b.plot(s_car[np.where(k)[0][-1]], 1.5, 's', color=C_CAR, ms=9, label='real car @ DIVE end')
+            car_d = np.hypot(cn - an, ce - ae)
+    v_t = (s_tg[i_e] - s_tg[i_d]) / max(t[i_e] - t[i_d], 1e-3)
+    b.set_title(f'(b) Altitude profile in inertial frame — target moves '
+                f'{"right" if v_t >= 0 else "left"} (ideal {ang:g}° glide slope)', loc='left')
+    b.set(xlabel='downrange along initial LOS (m)   [ 0 = target at dive entry ]', ylabel='AGL (m)')
+    b.set_ylim(bottom=-6)
+    b.xaxis.labelpad = 30 if 'PRE_DIVE' in R.first else 4
+    b.grid(alpha=.25, ls=':')
+    b.legend(loc='lower left', ncol=2, fontsize=7.5)
+    c = ax[2]
+    tt = t - sp[0]
+    gd = L.num('ground_m')
+    c.plot(tt[d], gd[d], color=C_BLK, lw=1.6, label='aircraft → virtual target')
+    box = f'virtual: {gd[i_d]:.1f} m  ->  {gd[i_e]:.1f} m'
+    if car_d is not None:
+        c.plot(tt[d], car_d[d], color=C_CAR, lw=1.6, label='aircraft → real car (GPS)')
+        kk = np.where(d & np.isfinite(car_d))[0]
+        if len(kk):
+            box += f'\nreal car: {car_d[kk[0]]:.1f} m  ->  {car_d[kk[-1]]:.1f} m'
+    stat_box(c, box, 'upper right')
+    c.set_xlim(0, sp[1] - sp[0])
+    c.set(xlabel='t (s)   [ t = 0 at DIVE entry ]', ylabel='Horizontal distance (m)')
+    c.set_title('(c) Aircraft-to-target horizontal distance during DIVE', loc='left')
+    c.grid(alpha=.25, ls=':')
+    c.legend(loc='lower left', fontsize=8)
+    _title(fig, 3, 'Altitude profile', title)
+    _save(fig, path, pdf)
+
+
+def figP4_glide(R, path, title, pdf):
+    """Fig 4  俯衝航跡角 vs 理想下滑角, t = 0 在 DIVE 進入."""
+    sp = _dive_span(R)
+    if sp is None:
+        return False
+    L = R.L
+    d = R.m('DIVE')
+    tt = R.t - sp[0]
+    ang = C('DIVE_ANGLE_DEG')
+    gam = L.num('gamma_deg')
+    err = L.num('glide_slope_err_deg') if L.has('glide_slope_err_deg') else gam + ang
+    fig, ax = plt.subplots(2, 1, figsize=(10, 7.2), layout='constrained')
+    ax[0].axhline(-ang, color='#2E8B57', ls='--', lw=1.5, label=f'ideal glide slope (−{ang:g}°)')
+    ax[0].plot(tt[d], gam[d], color=C_BLK, lw=1.8, label=r'flight-path angle $\gamma$')
+    gd = gam[d][np.isfinite(gam[d])]
+    if len(gd):
+        stat_box(ax[0], f'final γ = {gd[-1]:6.2f} deg\nmin   γ = {gd.min():6.2f} deg', 'upper right')
+    ax[0].set_title('(a) Flight-path angle vs. ideal glide slope (DIVE phase)', loc='left')
+    ax[0].set(ylabel=r'$\gamma$ (deg)')
+    ax[0].legend(loc='lower left', ncol=2, fontsize=8)
+    ax[1].plot(tt[d], err[d], color=C_TRK, lw=1.8, label=r'glide-slope error  $\gamma - \gamma_{cmd}$')
+    ax[1].fill_between(tt[d], 0, err[d], color=C_TRK, alpha=.15)
+    ax[1].axhline(0, color='#2E8B57', ls='--', lw=1.2)
+    stat_box(ax[1], f'DIVE RMSE = {rmse(err[d]):5.2f} deg', 'upper right')
+    ax[1].set_title('(b) Glide-slope error', loc='left')
+    ax[1].set(ylabel='error (deg)')
+    ax[1].legend(loc='upper left', fontsize=8)
+    for a in ax:
+        a.set_xlim(0, sp[1] - sp[0])
+        a.set_xlabel('t (s)   [ t = 0 at DIVE entry ]')
+        a.grid(alpha=.25, ls=':')
+    _title(fig, 4, 'Glide-slope tracking (DIVE phase)', title)
+    _save(fig, path, pdf)
+    return True
+
+
+def figP4b_detection(R, path, title, pdf):
+    """Fig 4b  各階段雲台偵測率 (以收到的新辨識結果計)."""
+    L = R.L
+    if not (L.has('vis_link') and L.has('vis_valid')):
+        return False
+    link = L.num('vis_link') > 0
+    new = (L.num('vis_new') > 0) if L.has('vis_new') else np.ones(L.n, bool)
+    valid = L.num('vis_valid') > 0
+    phases = [m for m in ('SEARCH', 'PRE_DIVE', 'DIVE') if R.m(m).any()]
+    if not phases:
+        return False
+    fig, ax = plt.subplots(figsize=(10, 6), layout='constrained')
+    for i, m in enumerate(phases):
+        k = R.m(m) & link & new
+        n = int(k.sum())
+        nd = int((k & valid).sum())
+        pct = 100.0 * nd / n if n else 0.0
+        ax.bar(i, pct, width=.55, color=MODE_COLOR[m])
+        ax.text(i, pct + 2, f'{pct:.1f}%\n{nd} / {n} frames', ha='center', va='bottom', fontsize=12)
+    ax.set_xticks(range(len(phases)), phases, fontsize=12)
+    ax.set_ylim(0, 115)
+    ax.set_yticks(range(0, 101, 20))
+    ax.set_ylabel('Target detection rate (%)', fontsize=12)
+    ax.set_xlabel('Mission phase\n\nDetected target frames / gimbal results received in each phase')
+    ax.spines[['top', 'right']].set_visible(False)
+    ax.grid(axis='y', alpha=.3, ls=':')
+    ax.set_title('(b) Gimbal (partner Orin) target detection rate', loc='left', fontweight='bold',
+                 fontsize=13)
+    fig.suptitle(f'Fig 4b — {title}', fontsize=10, x=.99, ha='right')
+    _save(fig, path, pdf)
+    return True
+
+
+def figP5_replay(R, path, title, pdf, gimb):
+    """Fig 5  同一套 PID (50 Hz): 虛擬目標 vs 雲台補償後的輸入與重算命令."""
+    sp = _dive_span(R)
+    if sp is None or gimb is None or not (gimb[2] & R.m('DIVE')).any():
+        return False
+    L = R.L
+    d = R.m('DIVE')
+    tt = R.t - sp[0]
+    fxv, fyv, cxv, cyv = _virt_intrinsics()
+    usp = np.where(np.isfinite(L.num('virt_u_sp')), L.num('virt_u_sp'), cxv)
+    vsp = np.where(np.isfinite(L.num('virt_v_sp')), L.num('virt_v_sp'), cyv)
+    vu, vv = L.num('virt_bbox_u'), L.num('virt_bbox_v')
+    gu, gv, gok = gimb[0], gimb[1], gimb[2]
+    rep_v = replay_pid(R, vu, vv, L.num('virt_detected') > 0)
+    rep_g = replay_pid(R, gu, gv, gok)
+    n = 5 if rep_g is not None else 2
+    fig, ax = plt.subplots(n, 1, figsize=(10, 2.6 * n + 1), layout='constrained')
+    dn = np.where(d, 1.0, np.nan)
+    for a, x, xs, f, lab in ((ax[0], vu, usp, fxv, '(a) Horizontal input error before PID filtering'),
+                             (ax[1], vv, vsp, fyv, '(b) Vertical input error before PID filtering')):
+        gx = gu if a is ax[0] else gv
+        a.plot(tt, np.degrees(np.arctan((x - xs) / f)) * dn, color=C_VIR, lw=2, label='Virtual target')
+        a.plot(tt, np.where(gok, np.degrees(np.arctan((gx - xs) / f)), np.nan) * dn, '--', color=C_GIM,
+               lw=1.6, marker='.', ms=3, label='Gimbal data with compensation')
+        a.set_title(lab, loc='center', fontweight='bold')
+        a.set_ylabel('Error (deg)')
+    if rep_g is not None:
+        K, lim = C('K_LAT_TO_RUDDER'), C('RUDDER_LIMIT_DEG')
+        for a, kv, lab, yl in ((ax[2], 2, '(c) Recomputed heading commands', 'Heading (deg)'),
+                               (ax[3], 0, '(d) Recomputed pitch commands', 'Pitch (deg)')):
+            yv, yg = rep_v[kv], rep_g[kv]
+            if kv == 2:
+                base = yv[np.isfinite(yv)][0] if np.isfinite(yv).any() else 0.0
+                yv, yg = base + wrap180(yv - base), base + wrap180(yg - base)
+            a.plot(tt, yv, color=C_VIR, lw=2, label='Virtual target')
+            a.plot(tt, yg, '--', color=C_GIM, lw=1.8, label='Gimbal data with compensation')
+            a.set_title(lab, loc='center', fontweight='bold')
+            a.set_ylabel(yl)
+        ax[4].plot(tt, np.clip(K * rep_v[1], -lim, lim), color=C_VIR, lw=2, label='Virtual target')
+        ax[4].plot(tt, np.clip(K * rep_g[1], -lim, lim), '--', color=C_GIM, lw=1.8,
+                   label='Gimbal data with compensation')
+        ax[4].set_title(f'(e) Recomputed rudder commands (K_LAT_TO_RUDDER = {K:g}, ±{lim:g}°)',
+                        loc='center', fontweight='bold')
+        ax[4].set_ylabel('Rudder (deg)')
+    for a in ax:
+        a.set_xlim(0, sp[1] - sp[0])
+        a.set_xlabel('Time since DIVE entry (s)')
+        a.grid(alpha=.25, ls=':')
+        a.legend(loc='upper right', fontsize=8)
+    fig.suptitle(f'Fig 5  Inputs then same PID at 50 Hz — {title}\n'
+                 'Gimbal: pitch/roll earth-referenced, yaw = aircraft nose (offline, open-loop replay)',
+                 fontsize=12, fontweight='bold')
+    _save(fig, path, pdf)
+    return True
+
+
+def figP6_airspeed(R, path, title, pdf):
+    """Fig 6  空速 (撥 GUIDED → DIVE 結束), 各階段平均虛線 + 表格."""
+    L, t = R.L, R.t
+    sp = _dive_span(R)
+    x1 = sp[1] if sp else _guided_end(R)
+    w = (t >= 0) & (t <= x1)
+    V = L.num('V')
+    fig, ax = plt.subplots(figsize=(10, 5), layout='constrained')
+    ax.plot(t[w], V[w], color=C_BLK, lw=1.8, drawstyle='steps-post', label='airspeed $V$')
+    rows = []
+    for m in ('SEARCH', 'PRE_DIVE', 'DIVE'):
+        k = w & (R.mode == m)
+        if not k.any():
+            continue
+        a, b = float(t[k][0]), float(t[k][-1])
+        ax.plot([a, b], [nanmean(V[k])] * 2, '--', color=MODE_COLOR[m], lw=1.5)
+        rows.append(f'{m:<9s}{b - a:5.1f}{V[k][0]:7.1f}{V[k][-1]:6.1f}{nanmean(V[k]):7.1f}'
+                    f'{nanmin(V[k]):7.1f}{nanmax(V[k]):7.1f}')
+    kk = np.where(w & np.isfinite(V))[0]
+    if len(kk):
+        c = MODE_COLOR.get(R.mode[kk[-1]], C_TRK)
+        ax.plot(t[kk[-1]], V[kk[-1]], 'o', mfc='white', mec=c, mew=2, ms=8, zorder=5)
+        ax.annotate(f'{V[kk[-1]]:.1f} m/s', (t[kk[-1]], V[kk[-1]]), xytext=(-8, 10),
+                    textcoords='offset points', ha='right', color=c, fontweight='bold')
+    if np.isfinite(nanmax(V[w])) and nanmax(V[w]) > 0.8 * C('PULLOUT_VMAX_MPS'):
+        ax.axhline(C('PULLOUT_VMAX_MPS'), color=C_TRK, ls=':', lw=1.2,
+                   label=f'Vmax {C("PULLOUT_VMAX_MPS"):g} m/s (early pullout)')
+    if rows:
+        stat_box(ax, 'mode       dur  entry  exit   mean    min    max\n' + '\n'.join(rows)
+                 + '\n' + ' ' * 38 + '(s, m/s)', 'lower right')
+    _bands(ax, R, x0=0, x1=x1, labels=True)
+    ax.set_xlim(0, x1)
+    ax.set(xlabel='t (s)   [ t = 0 at GUIDED entry;  end = DIVE exit ]', ylabel='airspeed (m/s)')
+    ax.set_title('Airspeed by guidance phase  (dashed = phase mean)', loc='left')
+    ax.grid(alpha=.25, ls=':')
+    ax.legend(loc='upper left', fontsize=9)
+    _title(fig, 6, 'Airspeed (GUIDED entry → DIVE exit)', title)
+    _save(fig, path, pdf)
+
+
+def figP7_loop_error(R, path, title, pdf, gimb):
+    """Fig 7  DIVE 控制迴路誤差: 影像誤差 → 姿態追蹤誤差."""
+    sp = _dive_span(R)
+    if sp is None:
+        return False
+    L = R.L
+    d = R.m('DIVE')
+    tt = R.t - sp[0]
+    agl = L.num('agl')
+    kd = np.where(d)[0]
+    xl = f't (s)   [ t = 0 at DIVE entry,  AGL {agl[kd[0]]:.0f} to {agl[kd[-1]]:.0f} m ]'
+    eu, ev = L.num('pid_u_err_deg'), L.num('pid_v_err_deg')
+    pe = L.num('pitch_cmd') - L.num('theta_deg')
+    ce = wrap180(L.num('heading_cmd') - _course(L))
+    ge = [None, None]
+    if gimb is not None and (gimb[2] & d).any():
+        fxv, fyv, cxv, cyv = _virt_intrinsics()
+        usp = np.where(np.isfinite(L.num('virt_u_sp')), L.num('virt_u_sp'), cxv)
+        vsp = np.where(np.isfinite(L.num('virt_v_sp')), L.num('virt_v_sp'), cyv)
+        ge = [np.where(gimb[2] & d, np.degrees(np.arctan((gimb[0] - usp) / fxv)), np.nan),
+              np.where(gimb[2] & d, np.degrees(np.arctan((gimb[1] - vsp) / fyv)), np.nan)]
+    fig, ax = plt.subplots(4, 1, figsize=(9, 12), layout='constrained')
+    spec = ((eu, '#2E86C1', r'$e_u$ lateral image error (right +)', '(a)  Lateral image error',
+             r'$e_u$ (deg)', ge[0]),
+            (ev, '#17A589', r'$e_v$ longitudinal image error (down +)', '(b)  Longitudinal image error',
+             r'$e_v$ (deg)', ge[1]),
+            (pe, C_TRK, r'pitch tracking error $\theta_{cmd} - \theta$', '(c)  Longitudinal tracking error',
+             'pitch error (deg)', None),
+            (ce, '#8E44AD', r'course tracking error $\psi_{cmd} - \chi$', '(d)  Lateral tracking error',
+             'heading error (deg)', None))
+    for a, (y, col, lab, ttl, yl, g) in zip(ax, spec):
+        a.plot(tt[d], y[d], color=col, lw=1.8, label=f'{lab}   RMS = {rmse(y[d]):.1f} deg')
+        if g is not None:
+            a.plot(tt, g, '.', ms=3, color='#E67E22', label=f'gimbal (compensated)   RMS = {rmse(g):.1f} deg')
+        a.axhline(0, color='#AAAAAA', lw=1)
+        a.set_xlim(0, sp[1] - sp[0])
+        a.set(xlabel=xl, ylabel=yl)
+        a.set_title(ttl, loc='left', fontsize=10)
+        a.grid(alpha=.25, ls=':')
+        a.legend(loc='upper right', fontsize=8)
+    _title(fig, 7, 'DIVE control-loop error (3-layer)', title)
+    _save(fig, path, pdf)
+    return True
+
+
+def figP8_gimbal(R, path, title, pdf):
+    """Fig 8  雲台姿態 (pitch / roll) + 模式, t = 0 在撥 GUIDED."""
+    L, t = R.L, R.t
+    if not (L.has('vis_gimbal_pitch') or L.has('vis_link')):
+        return False
+    sp = _dive_span(R)
+    x1 = (sp[1] + 2.0) if sp else _guided_end(R)
+    w = (t >= 0) & (t <= x1)
+    fig, ax = plt.subplots(3, 1, figsize=(10, 9), layout='constrained',
+                           gridspec_kw=dict(height_ratios=[1.2, 1, .7]))
+    gp = L.num('vis_gimbal_pitch')
+    lock, tol = C('GIMBAL_LOCK_PITCH_DEG'), C('GIMBAL_LOCK_TOL_DEG')
+    ax[0].plot(t[w], gp[w], color=C_BLK, lw=1.8, label='gimbal pitch (earth-ref)')
+    ax[0].axhspan(lock - tol, lock + tol, color='#7D3C98', alpha=.10)
+    ax[0].axhline(lock, color='#7D3C98', ls='--', lw=1.2, label=f'lock {lock:g}° ± {tol:g}°')
+    ax[1].plot(t[w], L.num('vis_gimbal_roll')[w], color=C_BLK, lw=1.8, label='gimbal roll')
+    ax[2].plot(t[w], L.num('vis_gimbal_mode')[w], color=C_BLK, lw=1.8, drawstyle='steps-post',
+               label='reported')
+    ax[2].plot(t[w], L.num('gimbal_mode_req')[w], '--', color=C_TRK, lw=1.5, drawstyle='steps-post',
+               label='requested')
+    ax[2].set_yticks([0, 1, 2], ['0 manual', '1 track', '2 lock'])
+    req = L.num('gimbal_mode_req')
+    kr = np.where(w & (req == 2))[0]
+    if len(kr):
+        tr = t[kr[0]]
+        lk = np.where(w & (t >= tr) & (L.num('gimbal_locked') > 0))[0]
+        for a in ax:
+            a.axvline(tr, color='#7D3C98', ls='-.', lw=1.5)
+            if len(lk):
+                a.axvline(t[lk[0]], color='#1E8449', ls='-.', lw=1.5)
+        txt = f'LOCK requested\nt = {tr:.2f} s'
+        if len(lk):
+            txt += f'\nlocked +{t[lk[0]] - tr:.2f} s'
+        ax[0].text(tr, .95, ' ' + txt, transform=ax[0].get_xaxis_transform(), va='top', fontsize=9,
+                   color='#7D3C98', bbox=dict(boxstyle='round', fc='white', ec='#7D3C98'))
+    for a, ttl, yl in ((ax[0], '(a) Gimbal pitch', 'Pitch (deg)'), (ax[1], '(b) Gimbal roll', 'Roll (deg)'),
+                       (ax[2], '(c) Gimbal mode', 'Mode')):
+        _bands(a, R, x0=0, x1=x1)
+        a.set_xlim(0, x1)
+        a.set(xlabel='Time (s) [t = 0 at GUIDED (SEARCH) entry]', ylabel=yl)
+        a.set_title(ttl, loc='left', fontweight='bold')
+        a.grid(alpha=.25, ls=':')
+        a.legend(loc='lower left', fontsize=8)
+    _title(fig, 8, 'Gimbal attitude', title)
+    _band_legend(fig, R)
+    fig.get_layout_engine().set(rect=(0, 0, 1, .95))
+    _save(fig, path, pdf)
+    return True
+
+
+def figP9_traj(R, path, title, pdf, car):
+    """Fig 9  DIVE 飛機與目標軌跡: 目標行進方向 = Y 軸, 原點 = DIVE 進入時的虛擬目標."""
+    sp = _dive_span(R)
+    if sp is None:
+        return False
+    L, t = R.L, R.t
+    d = R.m('DIVE')
+    kd = np.where(d)[0]
+    i0, i1 = kd[0], kd[-1]
+    an, ae, tn, te = L.num('ac_n'), L.num('ac_e'), L.num('tgt_n'), L.num('tgt_e')
+    fw = np.array([tn[i1] - tn[i0], te[i1] - te[i0]])
+    if np.hypot(*fw) < 1.0:                          # 靜止目標: 用 DIVE 進入時的視線
+        fw = np.array([tn[i0] - an[i0], te[i0] - ae[i0]])
+    fw = fw / max(np.hypot(*fw), 1e-6)
+    rt = np.array([-fw[1], fw[0]])
+    On, Oe = tn[i0], te[i0]
+    X = lambda n, e: (n - On) * rt[0] + (e - Oe) * rt[1]     # noqa: E731
+    Y = lambda n, e: (n - On) * fw[0] + (e - Oe) * fw[1]     # noqa: E731
+    psi_f = math.degrees(math.atan2(fw[1], fw[0]))
+    fig, ax = plt.subplots(figsize=(7, 11), layout='constrained')
+    ax.axvline(0, color='#AAB7B8', lw=1)
+    ax.axhline(0, color='#AAB7B8', lw=.6)
+    ax.plot(X(an[kd], ae[kd]), Y(an[kd], ae[kd]), '--', color='k', lw=2.2, label='Aircraft trajectory')
+    ax.plot(X(tn[kd], te[kd]), Y(tn[kd], te[kd]), '--', color=C_TRK, lw=2.2,
+            label='Vehicle trajectory (virtual target)')
+    if car is not None:
+        cn, ce = car
+        k = kd[np.isfinite(cn[kd])]
+        if len(k):
+            ax.plot(X(cn[k], ce[k]), Y(cn[k], ce[k]), '-', color=C_CAR, lw=2, label='Real car GPS')
+            ax.plot(X(cn[k[0]], ce[k[0]]), Y(cn[k[0]], ce[k[0]]), '^', color=C_CAR, ms=10)
+            ax.plot(X(cn[k[-1]], ce[k[-1]]), Y(cn[k[-1]], ce[k[-1]]), 'D', color=C_CAR, ms=9)
+    ax.plot(X(an[i0], ae[i0]), Y(an[i0], ae[i0]), 'o', color='k', ms=11)
+    ax.plot(X(an[i1], ae[i1]), Y(an[i1], ae[i1]), 's', color='k', ms=10)
+    ax.plot(0, 0, '*', color=C_TRK, ms=16)
+    ax.plot(X(tn[i1], te[i1]), Y(tn[i1], te[i1]), 'D', color=C_TRK, ms=11)
+    for txt, n, e, dx in (('Vehicle entry', On, Oe, 10), ('Vehicle end', tn[i1], te[i1], 10),
+                          ('Aircraft entry', an[i0], ae[i0], 10), ('Aircraft end', an[i1], ae[i1], 10)):
+        ax.annotate(txt, (X(n, e), Y(n, e)), xytext=(dx, -4), textcoords='offset points', fontsize=11,
+                    color='#4D5656')
+    yaw = L.num('yaw_deg') if L.has('yaw_deg') else L.num('chi_deg')
+    arrow = 14.0
+    for s_ in np.arange(0, sp[1] - sp[0] + 1e-6, 1.0):
+        i = int(np.argmin(np.abs(t - (sp[0] + s_))))
+        if not d[i] or not np.isfinite(yaw[i]):
+            continue
+        rel = math.radians(yaw[i] - psi_f)
+        x, y = X(an[i], ae[i]), Y(an[i], ae[i])
+        ax.annotate('', (x + arrow * math.sin(rel), y + arrow * math.cos(rel)), (x, y),
+                    arrowprops=dict(arrowstyle='-|>', color='#2E6DA4', lw=1.6))
+        ax.text(x + 22, y, f'{s_:.0f} s', color='#2E6DA4', fontsize=11, va='center')
+    ax.plot([], [], color='#2E6DA4', marker='>', label='Aircraft heading every 1 s')
+    ax.set_aspect('equal', adjustable='datalim')
+    ax.set(xlabel='Cross-track position (m)', ylabel='Along vehicle travel direction (m)')
+    ax.grid(alpha=.25, ls=':')
+    ax.legend(loc='upper center', bbox_to_anchor=(.5, 1.13), fontsize=10)
+    fig.suptitle(f'Fig 9  DIVE aircraft and vehicle trajectories\nVehicle path aligned with x = 0\n{title}',
+                 fontsize=12)
+    _save(fig, path, pdf)
+    return True
 
 
 # ─────────────────────────── 雲台資料 → 控制命令 (離線重放) ───────────────────────────
@@ -858,22 +1162,30 @@ def gimbal_to_virtual(R, args):
     return u, v, np.isfinite(u), age
 
 
-def car_in_virtual(R, bins):
-    """用真車 GPS 算「車子理論上在虛擬相機的哪裡」(= 沒有量測誤差的雲台). 失敗回傳 None, 原因."""
+def car_ned_rows(R, bins):
+    """真車 GPS 內插到 log 每一列 (log 的 NED 座標). 回傳 ((car_n, car_e), '') 或 (None, 原因)."""
     import xwing_plot_target_gps as TG
     L = R.L
     gu = L.num('gps_unix')
     d = R.m('PRE_DIVE', 'DIVE')
     if not d.any() or np.isfinite(gu[d]).sum() < 2:
-        return None, 'log 沒有 gps_unix'
+        return None, 'log 沒有 gps_unix 或沒有推頭'
     try:
         _, g = TG.pick_bin(bins, np.nanmin(gu[d]), np.nanmax(gu[d]))
         lat0, lon0 = TG.log_origin(L.num('lat'), L.num('lon'), L.num('ac_n'), L.num('ac_e'))
     except ValueError as exc:
         return None, str(exc)
     cn, ce = TG.car_ned(g, lat0, lon0)
-    rn = TG.interpolate(g['gps_unix'], cn, gu, 2.0)
-    re_ = TG.interpolate(g['gps_unix'], ce, gu, 2.0)
+    return (TG.interpolate(g['gps_unix'], cn, gu, 2.0), TG.interpolate(g['gps_unix'], ce, gu, 2.0)), ''
+
+
+def car_in_virtual(R, bins):
+    """用真車 GPS 算「車子理論上在虛擬相機的哪裡」(= 沒有量測誤差的雲台). 失敗回傳 None, 原因."""
+    L = R.L
+    car, why = car_ned_rows(R, bins)
+    if car is None:
+        return None, why
+    rn, re_ = car
     fxv, fyv, cxv, cyv = _virt_intrinsics()
     an, ae, agl = L.num('ac_n'), L.num('ac_e'), L.num('agl')
     th = L.num('theta_deg')
@@ -890,7 +1202,7 @@ def car_in_virtual(R, bins):
 
 
 def replay_pid(R, mu, mv, mdet):
-    """在 DIVE 段用 (mu, mv, mdet) 重跑一次 DivePID; 回傳 (pitch_cmd, dpsi, ok)."""
+    """在 DIVE 段用 (mu, mv, mdet) 重跑一次 DivePID; 回傳 (pitch_cmd, dpsi, heading_cmd)."""
     try:
         from dive_guidance import DivePID
         from xwing_virtual_common import build_gcfg
@@ -904,8 +1216,9 @@ def replay_pid(R, mu, mv, mdet):
     idx = np.where(R.m('DIVE'))[0]
     out_p = np.full(L.n, np.nan)
     out_d = np.full(L.n, np.nan)
+    out_h = np.full(L.n, np.nan)
     if len(idx) < 3:
-        return out_p, out_d
+        return out_p, out_d, out_h
     pc, hc = L.num('pitch_cmd'), L.num('heading_cmd')
     i0 = idx[0]
     j = i0 - 1 if i0 > 0 and np.isfinite(pc[i0 - 1]) else i0
@@ -923,13 +1236,14 @@ def replay_pid(R, mu, mv, mdet):
         else:
             hnow = float(yaw[k]) if np.isfinite(yaw[k]) else 0.0
         det = bool(mdet[k])
-        p, _ = pid.update(float(mu[k]) if det else None, float(mv[k]) if det else None,
+        p, h = pid.update(float(mu[k]) if det else None, float(mv[k]) if det else None,
                           float(usp[k]) if np.isfinite(usp[k]) else gcfg.CX,
                           float(vsp[k]) if np.isfinite(vsp[k]) else gcfg.CY,
                           det, float(th[k]), hnow, dt)
         out_p[k] = p
         out_d[k] = pid.info['dpsi']
-    return out_p, out_d
+        out_h[k] = h
+    return out_p, out_d, out_h
 
 
 def fig12_gimbal_replay(R, path, title, pdf, st, args, bins):
@@ -1038,7 +1352,7 @@ def fig12_gimbal_replay(R, path, title, pdf, st, args, bins):
         a.legend(fontsize=7, loc='upper right', ncol=3)
         a.set_xlim(a0, a1)
     a4.legend(fontsize=7, loc='lower right')
-    fig.suptitle(f'Fig 12  Gimbal data as control input (offline replay, gimbal pitch/roll earth-ref,'
+    fig.suptitle(f'Fig 15  Gimbal vs virtual target vs real car (offline replay, gimbal pitch/roll earth-ref,'
                  f' yaw = nose) — {title}', fontsize=10, x=.02, ha='left')
     mode_legend(fig, R.segs)
     _save(fig, path, pdf)
@@ -1184,7 +1498,7 @@ def analyse(R, st, events, gps_lines):
                     f'(設計 −{C("DIVE_ANGLE_DEG"):g}°)')
         if np.isfinite(gm) and abs(gm + C('DIVE_ANGLE_DEG')) > 3:
             warn(f'實際俯衝角 γ {gm:.1f}° 跟設計 −{C("DIVE_ANGLE_DEG"):g}° 差 '
-                 f'{abs(gm + C("DIVE_ANGLE_DEG")):.1f}° → 看 pitch 追蹤 (Fig 3) / ALPHA_DIVE_DEG')
+                 f'{abs(gm + C("DIVE_ANGLE_DEG")):.1f}° → 看 pitch 追蹤 (Fig 2, Fig 7) / ALPHA_DIVE_DEG')
         elif np.isfinite(gm):
             ok(f'俯衝角 γ {gm:.1f}°')
         pr = st.get('pitch_rmse_dive', float('nan'))
@@ -1220,9 +1534,9 @@ def analyse(R, st, events, gps_lines):
                 msg.append(f'誤差來回擺盪 ({osc:.1f} Hz) → {kp}={C(kp):g} 可能太大')
             if abs(mn) > 1.5:
                 msg.append(f'後半段一直偏 {mn:+.1f}° 沒收斂 → {ki}={C(ki):g} 可能不夠 '
-                           + ('或方向舵不夠力 (Fig 6)' if ax_ == 'u' else '或 pitch 追不上 (Fig 3)'))
+                           + ('或方向舵不夠力 (Fig 10)' if ax_ == 'u' else '或 pitch 追不上 (Fig 2, Fig 7)'))
             if r_ > 5:
-                msg.append(f'RMSE {r_:.1f}° 很大 → 先看推頭時是否已經對準 (Fig 4 起點)')
+                msg.append(f'RMSE {r_:.1f}° 很大 → 先看推頭時是否已經對準 (Fig 1 起點)')
             (warn if msg else ok)(f'{nm}影像誤差 RMSE {r_:.1f}°' + ('：' + '；'.join(msg) if msg else ''))
 
         # 方向舵
@@ -1243,7 +1557,7 @@ def analyse(R, st, events, gps_lines):
             nums.append(f'DIVE 最大 |roll| {rm:.1f}°')
             if rm > C('ROLL_PROT_FULL_DEG'):
                 warn(f'DIVE roll 到 {rm:.0f}° (> {C("ROLL_PROT_FULL_DEG"):g}°) → 方向舵-滾轉耦合大, '
-                     f'看 Fig 6 是否方向舵一打就滾')
+                     f'看 Fig 10 是否方向舵一打就滾')
 
         me = st.get('miss_end')
         if me:
@@ -1324,30 +1638,42 @@ def make_report(log_path, run, outdir, args, bins):
     p = lambda n: os.path.join(outdir, n)
     st = {}
     sub = f'{title}  run {run}' if not args.full else f'{title}  (full log)'
+    for old in glob.glob(os.path.join(outdir, 'fig*')):        # 舊版圖檔 (編號改過) 先清掉
+        os.remove(old)
+    compute_stats(R, st)
+    gimb = None
+    if R.L.has('vis_valid') and R.L.has('vis_off_x'):
+        g_ = gimbal_to_virtual(R, args)
+        gimb = g_ if g_[2].any() else None
+    car = car_ned_rows(R, bins)[0] if bins else None
     with PdfPages(p('report.pdf')) as pdf:
-        fig1_overview(R, p('fig1_overview.png'), sub, pdf)
-        fig2_profile(R, p('fig2_dive_profile.png'), sub, pdf)
-        fig3_attitude(R, p('fig3_attitude.png'), sub, pdf, st)
-        fig4_image(R, p('fig4_image_error.png'), sub, pdf, st)
-        fig5_pid(R, p('fig5_pid_terms.png'), sub, pdf)
-        fig6_rudder(R, p('fig6_rudder.png'), sub, pdf, st)
-        fig7_traj(R, p('fig7_trajectory.png'), sub, pdf)
-        fig8_miss(R, p('fig8_miss.png'), sub, pdf, st)
-        if not fig9_gimbal(R, p('fig9_gimbal.png'), sub, pdf, st):
-            if os.path.isfile(p('fig9_gimbal.png')):
-                os.remove(p('fig9_gimbal.png'))
-        fig10_system(R, p('fig10_system.png'), sub, pdf, st)
-        if not fig12_gimbal_replay(R, p('fig12_gimbal_replay.png'), sub, pdf, st, args, bins):
-            if os.path.isfile(p('fig12_gimbal_replay.png')):
-                os.remove(p('fig12_gimbal_replay.png'))
+        figP1_image_error(R, p('fig1_image_error.png'), sub, pdf, gimb)
+        figP2_attitude(R, p('fig2_attitude.png'), sub, pdf)
+        figP3_altitude(R, p('fig3_altitude_profile.png'), sub, pdf, car)
+        figP4_glide(R, p('fig4_glide_slope.png'), sub, pdf)
+        figP4b_detection(R, p('fig4b_gimbal_detection_rate.png'), sub, pdf)
+        figP5_replay(R, p('fig5_pid_replay_gimbal.png'), sub, pdf, gimb)
+        figP6_airspeed(R, p('fig6_airspeed.png'), sub, pdf)
+        figP7_loop_error(R, p('fig7_control_loop_error.png'), sub, pdf, gimb)
+        figP8_gimbal(R, p('fig8_gimbal_attitude.png'), sub, pdf)
+        figP9_traj(R, p('fig9_dive_trajectory.png'), sub, pdf, car)
+        # ── 以下是 X-wing 才有的診斷圖 ──
+        if R.m('DIVE').any():
+            fig6_rudder(R, p('fig10_rudder.png'), sub, pdf, st)
+            fig5_pid(R, p('fig11_pid_terms.png'), sub, pdf)
+            fig8_miss(R, p('fig12_predicted_miss.png'), sub, pdf, st)
+        fig10_system(R, p('fig13_system.png'), sub, pdf, st)
         gps_lines = []
         if bins:
             import xwing_plot_target_gps as TG
             try:
                 gps_lines, _ = TG.compare(TG.load_log_basic(log_path), run, bins,
-                                          p('fig11_target_gps'), title=title, pdf=pdf)
+                                          p('fig14_target_gps'), title=title, pdf=pdf)
             except ValueError as exc:
                 gps_lines = [f'沒畫 ({exc})']
+        if not fig12_gimbal_replay(R, p('fig15_gimbal_vs_car.png'), sub, pdf, st, args, bins):
+            if os.path.isfile(p('fig15_gimbal_vs_car.png')):
+                os.remove(p('fig15_gimbal_vs_car.png'))
     tl, evl, nums, chk = analyse(R, st, events, gps_lines)
     g_nums, g_chk = analyse_gimbal_replay(st)
     head = [f'log : {log_path}', f'趟次: run {run}' + ('  (--full 整份)' if args.full else ''),
@@ -1362,7 +1688,7 @@ def make_report(log_path, run, outdir, args, bins):
             + '\n\n【數字】\n' + '\n'.join('  ' + x for x in nums)
             + '\n\n【自動檢查】 (✓ 正常  ⚠ 建議看  ✗ 有問題  · 說明; 只是根據 log 的提示, 最後仍以圖為準)\n'
             + '\n'.join('  ' + x for x in chk)
-            + ('\n\n【雲台資料當控制命令 (離線重放, Fig 12)】\n'
+            + ('\n\n【雲台資料當控制命令 (離線重放, Fig 5 / Fig 15)】\n'
                + '\n'.join('  ' + x for x in g_nums + g_chk) if (g_nums or g_chk) else '')
             + '\n\n【events.txt (這趟)】\n' + '\n'.join(evl) + '\n')
     with open(p('summary.txt'), 'w', encoding='utf-8') as f:
@@ -1410,14 +1736,14 @@ def main():
     ap.add_argument('-o', '--outdir', default=os.path.join(HERE, 'plot_results'),
                     help='輸出根目錄 (預設 xwing_plot/plot_results/)')
     ap.add_argument('--car-bin-dir', default=None,
-                    help='車子 BIN 資料夾 → 加畫 Fig 11 (不給時: xwing_plot/car_bin/ 有 BIN 就自動用)')
+                    help='車子 BIN 資料夾 → 加畫 Fig 14 (不給時: xwing_plot/car_bin/ 有 BIN 就自動用)')
     ap.add_argument('--no-car', action='store_true', help='就算 car_bin/ 有 BIN 也不比對真車')
     ap.add_argument('--car-bin', action='append', default=[], help='直接指定車子 BIN (可多次)')
     ap.add_argument('--gimbal-pitch-offset', type=float, default=0.0,
-                    help='Fig 12: 雲台 pitch 零點修正 (deg, 加在回報值上)')
+                    help='Fig 5/15: 雲台 pitch 零點修正 (deg, 加在回報值上)')
     ap.add_argument('--gimbal-pitch-sign', type=float, default=1.0,
-                    help='Fig 12: 雲台 pitch 符號 (回報往下為負 = 1)')
-    ap.add_argument('--gimbal-roll-sign', type=float, default=1.0, help='Fig 12: 雲台 roll 符號')
+                    help='Fig 5/15: 雲台 pitch 符號 (回報往下為負 = 1)')
+    ap.add_argument('--gimbal-roll-sign', type=float, default=1.0, help='Fig 5/15: 雲台 roll 符號')
     args = ap.parse_args()
 
     logs = []
@@ -1452,7 +1778,7 @@ def main():
         import xwing_plot_target_gps as TG
         bins = TG.load_bins(TG.find_bins(args.car_bin_dir, args.car_bin))
         if not bins:
-            print('[plot] ⚠ 沒有可用的車子 BIN, 不畫 Fig 11')
+            print('[plot] ⚠ 沒有可用的車子 BIN, 不畫 Fig 14')
 
     done = [(lg, plot_one(lg, args, bins)) for lg in logs]
     if len(logs) > 1:

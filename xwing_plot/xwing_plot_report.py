@@ -1431,10 +1431,13 @@ def main():
         ap.error('請給 log 檔, 或加 --latest / --all')
     for lg in args.log:
         if not os.path.isfile(lg):
-            cand = os.path.join(args.log_dir, lg)
-            if not os.path.isfile(cand):
-                sys.exit(f'[plot] 找不到 {lg}')
-            lg = cand
+            # 只給檔名 / 從專案根目錄寫的 flight_logs/xxx.csv → 都去 log 資料夾找
+            cands = [os.path.join(args.log_dir, lg), os.path.join(args.log_dir, os.path.basename(lg)),
+                     os.path.join(ROOT, lg)]
+            found = [c for c in cands if os.path.isfile(c)]
+            if not found:
+                sys.exit(f'[plot] 找不到 {lg}  (找過: {args.log_dir})')
+            lg = found[0]
         logs.append(lg)
 
     bins = []

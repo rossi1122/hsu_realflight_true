@@ -3,9 +3,26 @@
 飛完後一個指令出全部圖、一份 PDF，加上一份 `summary.txt`（時間線、各段數字、哪些參數可能要調）。
 參考學長 realflight_plot 的圖表配置（Fig 1~9、虛擬目標 vs 真車 GPS），改寫成讀 **xwing_virtual 的 log**。
 
+畫圖相關的檔案全部放在專案的 **`xwing_plot/`** 資料夾，指令都在這個資料夾裡執行：
+
+```
+hsu_realflight_true/          (筆電上叫 x-wing_virtual)
+  flight_logs/                ← 飛機 log (飛行程式寫在這; 筆電上把 Orin 的拷過來放這)
+  xwing_virtual_config.py     ← 畫圖會讀這裡的參數 (所以要拷整個專案)
+  dive_guidance.py ...        ← Fig 12 重放用
+  xwing_plot/
+    xwing_plot_report.py      主程式
+    xwing_plot_target_gps.py  虛擬目標 vs 真車 (主程式會自動呼叫, 也可單獨跑)
+    test_plot_report.py       不用飛機的測試
+    PLOT_STEPS.txt            筆電照抄步驟
+    PLOT_GUIDE.md             本說明
+    car_bin/                  ← 車子 .BIN 放這裡 (有 BIN 就自動比對真車)
+    plot_results/             ← 輸出 (自動產生)
+```
+
 | 程式 | 對應學長的 | 做什麼 |
 |---|---|---|
-| `xwing_plot_report.py` | `plot_flight_report*.py` / `plot_moving_report*.py` | 主報告：Fig 1~10 + report.pdf + summary.txt（加 `--car-bin-dir` 會再畫 Fig 11） |
+| `xwing_plot_report.py` | `plot_flight_report*.py` / `plot_moving_report*.py` | 主報告：Fig 1~12 + report.pdf + summary.txt |
 | `xwing_plot_target_gps.py` | `plot_target_gps_comparison.py` | 虛擬目標 vs 真車 GPS（BIN），可單獨跑 |
 
 學長原本那幾支**不能直接讀 X-wing 的 log**：它們需要 `_vision.csv`（機上 YOLO）、`real_*` / `real_comp_pid_*` 欄位、`_raw.mp4`（`redetect_yolo.py`），X-wing 這版沒有 YOLO 也沒錄影，所以沒有放進來。
@@ -14,58 +31,31 @@
 
 ---
 
-## 1. 飛測前一天先確認（Orin 或筆電）
+## 1. 飛測前先確認（Orin 或筆電）
 
 ```bash
-cd ~/catkin_ws/src/hsu_realflight_true
+cd ~/catkin_ws/src/hsu_realflight_true/xwing_plot
 python3 -c "import numpy, matplotlib; print('OK')"
+python3 test_plot_report.py --vision     # 不用飛機: 模擬一趟 + 假雲台 + 假車子 BIN, 再自動畫圖
 ```
-- 印出 `OK` 就可以。沒有的話（需要網路）：`pip3 install numpy matplotlib`
-- 在筆電畫也可以：把整個專案資料夾（至少 `xwing_plot_report.py`、`xwing_plot_target_gps.py`、`xwing_virtual_config.py`）跟 log 一起拷過去，指令完全一樣（Windows 把 `python3` 換成 `python`）。
-
-**不用飛機先試一次整個流程**（產生模擬的一趟 log + 假車子 BIN，再自動畫圖）：
-```bash
-python3 test_plot_report.py              # 一趟
-python3 test_plot_report.py --two-runs   # 同一份 log 切兩次 GUIDED
-```
-最後出現 `[test] 完成` 就代表能畫，結果在 `plot_results/xwing_virtual_<時間>_plottest/run1/report.pdf`。
-模擬的飛機模型很粗，圖裡的數字不代表實飛結果，只用來確認流程。
-
-用之前的地面測試 log 試也可以（沒推頭，所以只有部分圖有內容）：
-```bash
-python3 xwing_plot_report.py flight_logs/<地面測試 log>.csv --full
-```
+- 印出 `OK`、最後出現 `[test] 完成` 就可以。沒有套件的話（需要網路）：`pip3 install numpy matplotlib`
+- 在筆電畫：拷**整個專案**（不能只拷 `xwing_plot/`），指令一樣，Windows 把 `python3` 換成 `python`。筆電步驟見 `PLOT_STEPS.txt`。
+- 測試結果在 `xwing_plot/plot_results/xwing_virtual_<時間>_plottest_gimbal/run1/report.pdf`。模擬的飛機模型很粗，圖裡的數字不代表實飛結果。
 
 ---
 
 ## 2. 飛完後怎麼畫（照抄）
 
-**(1) 只畫飛機（最常用）**
 ```bash
-cd ~/catkin_ws/src/hsu_realflight_true
-python3 xwing_plot_report.py --latest
-```
-`--latest` = `flight_logs/` 裡最新的那份 log。要畫指定的 log：
-```bash
-ls -lt flight_logs/ | head
-python3 xwing_plot_report.py flight_logs/xwing_virtual_20261030_XXXXXX_flight1.csv
+cd ~/catkin_ws/src/hsu_realflight_true/xwing_plot
+python3 xwing_plot_report.py --all          # ★ ../flight_logs/ 每一份、每一趟都畫, 最後印總表
+python3 xwing_plot_report.py --latest       # 只畫最新那份
+python3 xwing_plot_report.py <檔名.csv> ...  # 只畫指定的 (只給檔名, 會去 flight_logs 找)
 ```
 
-**一天有好幾份 log：全部一次畫**
-```bash
-python3 xwing_plot_report.py --all                    # flight_logs/ 每一份都畫, 最後印總表
-python3 xwing_plot_report.py <log1.csv> <log2.csv>    # 只畫指定的幾份
-```
+**真車比較（Fig 11、Fig 12 綠線）**：車子飛控 SD 卡 `LOGS/` 裡**當天**的 `.BIN` 放進 `xwing_plot/car_bin/`，就會**自動**比對（程式用 GPS 時間自己挑對的那一個）。不要比對就加 `--no-car`；BIN 放在別的地方用 `--car-bin-dir <資料夾>`。
 
-**(2) 加上真車 GPS 比較（Fig 11）**
-1. 車子飛控的 SD 卡 → `LOGS/` 裡當天的 `.BIN`，複製到專案底下的 `car_bin/` 資料夾（只放**當天**的就好，程式會用 GPS 時間自己挑對的那一個）。
-2. 執行：
-```bash
-mkdir -p car_bin          # 第一次才需要
-python3 xwing_plot_report.py --latest --car-bin-dir car_bin
-```
-
-**(3) 只畫某一趟 / 地面測試**
+其他選項：
 ```bash
 python3 xwing_plot_report.py <log.csv> --run 2     # 只畫第 2 趟
 python3 xwing_plot_report.py <log.csv> --full      # 地面測試 / 沒有 GUIDED: 整份畫出來
@@ -78,10 +68,10 @@ python3 xwing_plot_report.py <log.csv> --full      # 地面測試 / 沒有 GUIDE
 ## 3. 輸出在哪、給老師看什麼
 
 ```
-plot_results/<log 檔名>/run1/
+xwing_plot/plot_results/<log 檔名>/run1/
     report.pdf          ← 全部圖合成一份，直接開給老師看
     summary.txt         ← 時間線 + 數字 + 自動檢查（⚠ = 建議看的參數）
-    fig1_overview.png ... fig11_target_gps.png
+    fig1_overview.png ... fig12_gimbal_replay.png
 ```
 `summary.txt` 的內容也會直接印在終端機上。
 
@@ -152,11 +142,11 @@ plot_results/<log 檔名>/run1/
 
 ⚠ **命令差是開環重放**：飛機實際是照虛擬目標飛，沒有照雲台命令飛，所以誤差不會被修掉、積分會一直累積。只看「一開始往哪個方向修、修多少」，不要把命令的 RMSE 當成控制效果。真正的控制效果要等實際用雲台閉迴路飛過才知道。
 
-沒有給車子 BIN 時，無法分辨「雲台不準」還是「車子不在虛擬位置」，summary 會提醒加 `--car-bin-dir`。
+沒有給車子 BIN 時，無法分辨「雲台不準」還是「車子不在虛擬位置」，summary 會提醒把車子 BIN 放進 `xwing_plot/car_bin/`。
 
 選項：`--gimbal-pitch-offset`（pitch 零點修正，度）、`--gimbal-pitch-sign`、`--gimbal-roll-sign`（預設 1，往下為負）。
 
-不用飛機先試：`python3 test_plot_report.py --vision`（假雲台看真車，車子比虛擬目標晚 4 s 出發）。
+不用飛機先試：在 `xwing_plot/` 執行 `python3 test_plot_report.py --vision`（假雲台看真車，車子比虛擬目標晚 4 s 出發）。
 
 ---
 
@@ -170,5 +160,5 @@ plot_results/<log 檔名>/run1/
 - **Fig 11 的「北向差」**：目標往南開，北向差為正 = 車子在虛擬目標**後面**（車子出發晚了）。
 - **只想單獨比對真車**：
   ```bash
-  python3 xwing_plot_target_gps.py flight_logs/<log>.csv --bin-dir car_bin
+  python3 xwing_plot_target_gps.py ../flight_logs/<log>.csv      (BIN 放 car_bin/)
   ```

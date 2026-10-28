@@ -7,16 +7,16 @@ xwing_plot_report.py — xwing_virtual 實飛 log → 報告圖 + 自動檢查 (
 (沒有 YOLO / _vision.csv / real_* 欄位, 改畫虛擬目標 PID、方向舵、雲台 UART 紀錄).
 只需要 numpy + matplotlib.
 
-用法:
+用法 (在 xwing_plot/ 資料夾裡執行; 車子 BIN 放 xwing_plot/car_bin/ 會自動比對):
+  python3 xwing_plot_report.py --all                          # ../flight_logs/ 裡每一份都畫
   python3 xwing_plot_report.py --latest                       # flight_logs/ 裡最新的一份
   python3 xwing_plot_report.py flight_logs/xwing_virtual_20261030_xxxxxx_flight2_A.csv
-  python3 xwing_plot_report.py <log.csv> --car-bin-dir car_bin   # 加畫 虛擬目標 vs 真車 GPS
-  python3 xwing_plot_report.py --all                          # flight_logs/ 裡每一份都畫
+  python3 xwing_plot_report.py <log.csv> --car-bin-dir <資料夾>   # BIN 放在別的地方時
   python3 xwing_plot_report.py <log1.csv> <log2.csv>          # 一次畫好幾份
   python3 xwing_plot_report.py <log.csv> --run 2              # 只畫第 2 趟
   python3 xwing_plot_report.py <log.csv> --full               # 不裁切, 畫整份 (地面測試用)
 
-輸出: plot_results/<log 檔名>/run<N>/
+輸出: xwing_plot/plot_results/<log 檔名>/run<N>/
   fig1_overview.png          模式 / AGL / 空速 / pitch / 油門 時間歷程
   fig2_dive_profile.png      距離–高度剖面 (對照設計 30° 線) + 航跡角 γ
   fig3_attitude.png          pitch / heading 命令 vs 實際, roll (含 roll 保護線)
@@ -48,8 +48,9 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Patch
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+HERE = os.path.dirname(os.path.abspath(__file__))       # xwing_plot/
+ROOT = os.path.dirname(HERE)                             # 專案根目錄 (config / dive_guidance / flight_logs)
+sys.path[:0] = [HERE, ROOT]
 plt.rcParams['axes.unicode_minus'] = False
 
 try:
@@ -1102,7 +1103,7 @@ def analyse_gimbal_replay(st):
                    + ' — 依據: 偵測率、延遲、雲台 vs 真車的偏差與跳動')
     else:
         chk.append(('· 偵測率 / 延遲 OK' if quality else '⚠ 偵測率或延遲不夠')
-                   + '; 沒有真車 GPS, 無法確認雲台量得準不準 → 加 --car-bin-dir 再跑一次')
+                   + '; 沒有真車 GPS, 無法確認雲台量得準不準 → 車子 BIN 放進 xwing_plot/car_bin/ 再跑一次')
     if 'gr_pitch_rmse' in st:
         chk.append('· 命令差 (pitch RMSE {:.1f}°, 方向舵 {:.1f}°) 是開環重放: 飛機沒有照雲台命令飛, '
                    '誤差不會被修掉, 積分會一直累積 → 只看「一開始往哪個方向修、修多少」, '
@@ -1402,12 +1403,15 @@ def main():
     ap.add_argument('log', nargs='*', help='xwing_virtual_*.csv (可以一次給好幾份; 不給就要用 --latest / --all)')
     ap.add_argument('--latest', action='store_true', help='用 flight_logs/ 裡最新的 log')
     ap.add_argument('--all', action='store_true', help='flight_logs/ 裡每一份 log 都畫')
-    ap.add_argument('--log-dir', default=os.path.join(HERE, 'flight_logs'))
+    ap.add_argument('--log-dir', default=os.path.join(ROOT, 'flight_logs'),
+                    help='log 資料夾 (預設: 專案根目錄的 flight_logs/)')
     ap.add_argument('--run', type=int, default=None, help='只畫第幾趟 (預設每一趟都畫)')
     ap.add_argument('--full', action='store_true', help='不分趟, 畫整份 log (地面測試)')
     ap.add_argument('-o', '--outdir', default=os.path.join(HERE, 'plot_results'),
-                    help='輸出根目錄 (預設 plot_results/)')
-    ap.add_argument('--car-bin-dir', default=None, help='車子 BIN 資料夾 → 加畫 Fig 11')
+                    help='輸出根目錄 (預設 xwing_plot/plot_results/)')
+    ap.add_argument('--car-bin-dir', default=None,
+                    help='車子 BIN 資料夾 → 加畫 Fig 11 (不給時: xwing_plot/car_bin/ 有 BIN 就自動用)')
+    ap.add_argument('--no-car', action='store_true', help='就算 car_bin/ 有 BIN 也不比對真車')
     ap.add_argument('--car-bin', action='append', default=[], help='直接指定車子 BIN (可多次)')
     ap.add_argument('--gimbal-pitch-offset', type=float, default=0.0,
                     help='Fig 12: 雲台 pitch 零點修正 (deg, 加在回報值上)')
@@ -1434,6 +1438,13 @@ def main():
         logs.append(lg)
 
     bins = []
+    auto_dir = os.path.join(HERE, 'car_bin')
+    if (not args.no_car and not args.car_bin_dir and not args.car_bin and os.path.isdir(auto_dir)
+            and glob.glob(os.path.join(auto_dir, '*.[Bb][Ii][Nn]'))):
+        args.car_bin_dir = auto_dir
+        print(f'[plot] 自動使用車子 BIN 資料夾: {auto_dir}  (不要比對真車就加 --no-car)')
+    if args.no_car:
+        args.car_bin_dir, args.car_bin = None, []
     if args.car_bin_dir or args.car_bin:
         import xwing_plot_target_gps as TG
         bins = TG.load_bins(TG.find_bins(args.car_bin_dir, args.car_bin))

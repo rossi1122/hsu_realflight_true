@@ -14,7 +14,7 @@ xwing_plot_target_gps.py — 虛擬目標 vs 真車 GPS 比較 (改寫自學長 
   · 也被 xwing_plot_report.py 呼叫 (--car-bin-dir), 一個指令出全部圖
 
 用法:
-  python3 xwing_plot_target_gps.py flight_logs/xwing_virtual_XXXX_flight2_A.csv --bin-dir car_bin
+  python3 xwing_plot_target_gps.py ../flight_logs/xwing_virtual_XXXX_flight2_A.csv   (BIN 放 car_bin/)
   python3 xwing_plot_target_gps.py <log.csv> --bin-file car_bin/00000031.BIN --run 2
 
 BIN 檔: 車子飛控 SD 卡 LOGS/ 裡的 .BIN. 程式自己掃 GPS 時間, 挑出完整涵蓋
@@ -348,11 +348,11 @@ def compare(d, run, bins, out_prefix, max_gap=2.0, after=10.0, leap_seconds=GPS_
 def main():
     ap = argparse.ArgumentParser(description='虛擬目標 vs 真車 GPS (BIN) 比較')
     ap.add_argument('log', help='xwing_virtual_*.csv (主 log)')
-    ap.add_argument('--bin-dir', default=None, help='車子 BIN 資料夾 (預設: log 旁邊的 car_bin/)')
+    ap.add_argument('--bin-dir', default=None, help='車子 BIN 資料夾 (預設: xwing_plot/car_bin/)')
     ap.add_argument('--bin-file', action='append', default=[], help='直接指定 BIN (可多次)')
     ap.add_argument('--recursive', action='store_true', help='包含 BIN 子資料夾')
     ap.add_argument('--run', type=int, default=None, help='只比較第幾趟 (預設全部)')
-    ap.add_argument('-o', '--outdir', default=None, help='輸出資料夾 (預設 plot_results/<log 名>/)')
+    ap.add_argument('-o', '--outdir', default=None, help='輸出資料夾 (預設 xwing_plot/plot_results/<log 名>/)')
     ap.add_argument('--after', type=float, default=10, help='PULLOUT 後多畫幾秒')
     ap.add_argument('--max-gap', type=float, default=2, help='GPS 內插允許的最大斷點 (s)')
     ap.add_argument('--leap-seconds', type=int, default=GPS_UTC_OFFSET_S)
@@ -363,7 +363,7 @@ def main():
         sys.exit(f'找不到 log: {a.log}')
     bin_dir = a.bin_dir
     if bin_dir is None and not a.bin_file:
-        bin_dir = os.path.join(os.path.dirname(os.path.abspath(a.log)), 'car_bin')
+        bin_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'car_bin')
     paths = find_bins(bin_dir, a.bin_file, a.recursive)
     if not paths:
         sys.exit(f'沒有 BIN 檔 (找的地方: {bin_dir or a.bin_file})')

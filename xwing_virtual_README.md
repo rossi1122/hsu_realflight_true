@@ -65,10 +65,12 @@
 | `xwing_virtual_PREFLIGHT_REVIEW_20261027.md` | (新) | ★ 週四飛測前總檢查：與原專案的參數差異、驗證狀態、飛前必做 |
 | `xwing_virtual_FLIGHT_DAY_QUICK.txt` | (新) | ★ 實飛指令最精簡版 (一頁，當天照抄) |
 | `xwing_virtual_FLIGHT_DAY_COMMANDS.txt` | (新) | ★ 實飛當天所有指令 (照順序，可直接複製) |
-| `xwing_plot_report.py` | (新) | ★ 飛完畫圖: log → Fig 1~10 + report.pdf + summary.txt (自動檢查參數) |
-| `xwing_plot_target_gps.py` | (新) | 虛擬目標 vs 真車 GPS (車子 BIN), 也可由上一支 `--car-bin-dir` 呼叫 |
-| `xwing_virtual_PLOT_GUIDE.md` | (新) | ★ 飛完畫圖的使用說明 (指令、每張圖看什麼、自動檢查門檻) |
-| `xwing_virtual_PLOT_STEPS.txt` | (新) | ★ 筆電 (Windows) 畫圖步驟: 安裝、拷 log、畫圖指令 (照抄) |
+| `xwing_plot/` | (新) | ★ 飛完畫圖 (全部放這個資料夾, 在裡面執行): |
+| `xwing_plot/xwing_plot_report.py` | (新) | 主程式: log → Fig 1~12 + report.pdf + summary.txt (自動檢查參數) |
+| `xwing_plot/xwing_plot_target_gps.py` | (新) | 虛擬目標 vs 真車 GPS (車子 BIN 放 `xwing_plot/car_bin/` 自動比對) |
+| `xwing_plot/test_plot_report.py` | (新) | 不用飛機測試畫圖流程 (`--vision` 加假雲台) |
+| `xwing_plot/PLOT_STEPS.txt` | (新) | ★ 筆電 (Windows) 畫圖步驟: 安裝、拷 log、畫圖指令 (照抄) |
+| `xwing_plot/PLOT_GUIDE.md` | (新) | 畫圖詳細說明 (每張圖看什麼、自動檢查門檻、Fig 12 雲台重放) |
 | `xwing_virtual_TEST_REPORT_20261020.md` | (新) | ★ 2026/10/20 雲台整合地面測試報告 (模式鍵、鎖定時間、資料鏈) |
 | `test_records/20261017_xwing/` | (資料) | 10/17 原始資料：參數檔、方向舵測試 CSV、掛機與實飛指令 log |
 | `test_records/20261020_gimbal/` | (資料) | 10/20 原始資料：雲台模式測試 CSV、整機掛機 + 雲台 log；`camera_B/` = 第二台相機 |

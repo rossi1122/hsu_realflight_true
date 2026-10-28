@@ -1,5 +1,17 @@
 X-wing 飛完畫圖 — 在筆電 (Windows) 上的執行步驟
-詳細說明 (每張圖看什麼、自動檢查門檻): xwing_virtual_PLOT_GUIDE.md
+詳細說明 (每張圖看什麼、自動檢查門檻): PLOT_GUIDE.md (同一個資料夾)
+
+畫圖的東西全部在專案的 xwing_plot 資料夾:
+  x-wing_virtual\                    ← 整個專案 (飛行程式、config 都在這層)
+    flight_logs\                     ← 飛機的 log (從 Orin 拷過來, 放這裡)
+    xwing_plot\                      ← ★ 畫圖都在這裡做
+      xwing_plot_report.py           主程式 (出全部的圖)
+      xwing_plot_target_gps.py       虛擬目標 vs 真車 (主程式會自動呼叫)
+      test_plot_report.py            不用飛機的測試
+      car_bin\                       ← 車子的 .BIN 放這裡 (有放就自動比對)
+      plot_results\                  ← 畫出來的圖 (自動產生)
+※ 畫圖會用到上一層的 xwing_virtual_config.py / dive_guidance.py,
+  所以要拷「整個專案」, 不能只拷 xwing_plot 資料夾.
 
 ==================================================================
  A. 第一次準備 (只做一次, 已完成可跳過)
@@ -13,19 +25,18 @@ X-wing 飛完畫圖 — 在筆電 (Windows) 上的執行步驟
    確認: python -c "import numpy, matplotlib; print('OK')"   → 出現 OK
 
 3. 專案放到筆電桌面, 例如 C:\Users\user\Desktop\x-wing_virtual
-   方法 1: Orin 用隨身碟拷整個 ~/catkin_ws/src/hsu_realflight_true 資料夾
-           (Orin 終端機)
+   方法 1: GitHub → 分支 claude/kind-clarke-r77kuq → Code → Download ZIP → 解壓到桌面
+   方法 2: Orin 用隨身碟拷整個 ~/catkin_ws/src/hsu_realflight_true 資料夾
            cd ~/catkin_ws/src/hsu_realflight_true
            git pull
            ls /media/$USER/                       ← 看隨身碟名稱
            cp -r ~/catkin_ws/src/hsu_realflight_true /media/$USER/<隨身碟名稱>/
            sync                                    ← 跑完再拔
-   方法 2: GitHub → 分支 claude/kind-clarke-r77kuq → Code → Download ZIP → 解壓到桌面
 
 4. 測試 (不用飛機):
-   用檔案總管打開 x-wing_virtual 資料夾 → 點上方路徑列 → 輸入 cmd → Enter
-   python test_plot_report.py
-   最後出現 [test] 完成 → 打開 plot_results\...\run1\report.pdf
+   檔案總管打開 x-wing_virtual\xwing_plot → 點上方路徑列 → 輸入 cmd → Enter
+   python test_plot_report.py --vision
+   最後出現 [test] 完成 → 打開 xwing_plot\plot_results\...\run1\report.pdf
 
 
 ==================================================================
@@ -33,46 +44,42 @@ X-wing 飛完畫圖 — 在筆電 (Windows) 上的執行步驟
 ==================================================================
 1. Orin Terminal 2: 輸入 q 按 Enter (結束飛行程式, log 才會存完整)
 
-2. 把 Orin 的 log 拷到筆電:
-   Orin 的   ~/catkin_ws/src/hsu_realflight_true/flight_logs   整個資料夾
-   → 隨身碟 → 貼到筆電 x-wing_virtual 資料夾裡 (覆蓋舊的 flight_logs)
-
+2. 飛機的 log → 筆電 x-wing_virtual\flight_logs\ (覆蓋舊的)
    Orin 終端機:
    cp -r ~/catkin_ws/src/hsu_realflight_true/flight_logs /media/$USER/<隨身碟名稱>/
    sync
 
 3. (要比對真車才做) 車子飛控 SD 卡 → LOGS\ 裡「當天」的 .BIN
-   → 放到筆電 x-wing_virtual\car_bin\ (沒有這個資料夾就自己新建)
+   → 放到 x-wing_virtual\xwing_plot\car_bin\ (沒有這個資料夾就自己新建)
    ※ 只放當天的 BIN, 程式會用 GPS 時間自己挑對的那一個
+   ※ car_bin 裡有 BIN 就會自動比對真車, 不用另外加參數
 
-4. 打開命令列: 檔案總管進 x-wing_virtual → 路徑列輸入 cmd → Enter
+4. 打開命令列: 檔案總管進 x-wing_virtual\xwing_plot → 路徑列輸入 cmd → Enter
 
-5. 畫圖 (選一個):
+5. 畫圖:
 
-   只畫飛機 (最新那份 log):
-   python xwing_plot_report.py --latest
-
-   加真車比較:
-   python xwing_plot_report.py --latest --car-bin-dir car_bin
-
-   ★ 一天有好幾份 log → 全部一次畫 (最簡單):
-   python xwing_plot_report.py --all --car-bin-dir car_bin
-     flight_logs 裡每一份都畫, 最後印「總表」: 每份 log 的每一趟飛到哪個模式、圖在哪
+   ★ 全部一次畫 (最簡單, 建議用這個):
+   python xwing_plot_report.py --all
+     flight_logs 裡每一份、每一趟都畫, 最後印「總表」
      沒切 GUIDED 的 (地面測試) 會自動跳過
 
-   只畫指定的幾份 (先 dir flight_logs 看檔名, 可以一次給好幾個):
-   python xwing_plot_report.py flight_logs\xwing_virtual_XXXXXXXX_XXXXXX_flight1.csv flight_logs\xwing_virtual_XXXXXXXX_XXXXXX_flight2.csv --car-bin-dir car_bin
-     小技巧: 打 flight_logs\xw 之後按 Tab 會自動補完檔名, 多按幾次 Tab 換下一個
+   只畫最新那份:
+   python xwing_plot_report.py --latest
+
+   只畫指定的幾份 (先 dir ..\flight_logs 看檔名):
+   python xwing_plot_report.py xwing_virtual_XXXXXXXX_XXXXXX_flight1.csv xwing_virtual_XXXXXXXX_XXXXXX_flight2.csv
+     (只打檔名就好, 程式會去 flight_logs 找)
 
    其他選項:
+   --no-car    car_bin 裡有 BIN 也不比對真車
    --run 2     只畫第 2 趟 (同一份 log 切了好幾次 GUIDED)
    --full      地面測試 / 沒切 GUIDED: 整份畫出來
 
-6. 看結果: x-wing_virtual\plot_results\<log 檔名>\run1\
+6. 看結果: x-wing_virtual\xwing_plot\plot_results\<log 檔名>\run1\
    report.pdf     ← 全部的圖, 直接開給老師看
    summary.txt    ← 時間線 + 數字 + 自動檢查
                     ✓ 正常   ⚠ 建議看的參數   ✗ 有問題
-   fig1 ~ fig11   ← 單張圖 (要放投影片用這些)
+   fig1 ~ fig12   ← 單張圖 (要放投影片用這些)
    切了幾次 GUIDED 就有幾個資料夾: run1, run2, ...
 
 
@@ -90,11 +97,11 @@ Fig 7  軌跡: 飛機 vs 虛擬目標 (俯視)
 Fig 8  預測落點誤差 (DIVE)
 Fig 9  雲台 UART (有接雲台才有)
 Fig 10 電壓、控制迴路 50 Hz
-Fig 11 虛擬目標 vs 真車 GPS (有給 car_bin 才有)
+Fig 11 虛擬目標 vs 真車 GPS (car_bin 有 BIN 才有)
 Fig 12 雲台資料當控制命令 (DIVE 有雲台資料才有): 把雲台量到的目標丟進同一套 PID 重算,
        跟實際命令比較; summary.txt 的【雲台資料當控制命令】段落有判斷
-       ※ 一定要加 --car-bin-dir car_bin, 才分得出「雲台不準」還是「車子不在虛擬位置」
-       不用飛機試: python test_plot_report.py --vision
+       ※ car_bin 要有車子 BIN, 才分得出「雲台不準」還是「車子不在虛擬位置」
+       顏色: 藍 = 實際控制 (虛擬目標)  橘 = 雲台  綠虛線 = 真車 GPS
 
 
 ==================================================================
@@ -105,7 +112,10 @@ Fig 12 雲台資料當控制命令 (DIVE 有雲台資料才有): 把雲台量到
 No module named numpy / matplotlib
     → python -m pip install numpy matplotlib
 找不到 log / 沒有 xwing_virtual_*.csv
-    → flight_logs 資料夾沒放進 x-wing_virtual 裡, 或放成 flight_logs\flight_logs
+    → flight_logs 要放在 x-wing_virtual\flight_logs (專案那層, 不是 xwing_plot 裡)
+      或放成 flight_logs\flight_logs 了
+can't open file 'xwing_plot_report.py'
+    → 命令列不在 xwing_plot 資料夾: 重新從 xwing_plot 的路徑列輸入 cmd
 這份 log 沒有任何 GUIDED 段
     → 地面測試 / 沒切 GUIDED: 加 --full
 Fig 11 沒畫 (summary.txt 會寫原因)

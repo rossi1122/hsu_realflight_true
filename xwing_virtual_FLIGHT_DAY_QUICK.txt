@@ -20,8 +20,8 @@ python3 xwing_virtual_flight.py --moving --case flight1 2>&1 | tee console_fligh
 python3 xwing_gimbal_mode_test.py   → 按 s → 按 q    (雲台回追蹤)
 log: flight_logs/  +  console_*.txt  +  飛控 .BIN
 
-【飛完畫圖】 (說明: xwing_virtual_PLOT_GUIDE.md)
-python3 xwing_plot_report.py --latest
-  加真車: 車子 SD 卡 LOGS/ 當天的 .BIN 複製到 car_bin/ 再跑
-python3 xwing_plot_report.py --latest --car-bin-dir car_bin
-  結果: plot_results/<log 名>/run1/report.pdf (給老師看) + summary.txt (⚠ = 要看的參數)
+【飛完畫圖】 (筆電照抄: xwing_plot/PLOT_STEPS.txt)
+cd xwing_plot
+python3 xwing_plot_report.py --all
+  加真車: 車子 SD 卡 LOGS/ 當天的 .BIN 放進 xwing_plot/car_bin/ 就會自動比對
+  結果: xwing_plot/plot_results/<log 名>/run1/report.pdf (給老師看) + summary.txt (⚠ = 要看的參數)

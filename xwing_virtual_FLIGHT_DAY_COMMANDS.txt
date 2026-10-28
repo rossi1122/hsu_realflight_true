@@ -116,25 +116,29 @@ ls -lt flight_logs/ | head
 
 
 ------------------------------------------------------------------
- 8. 飛完畫圖 (詳細: xwing_virtual_PLOT_GUIDE.md)
+ 8. 飛完畫圖 (筆電照抄: xwing_plot/PLOT_STEPS.txt, 詳細: xwing_plot/PLOT_GUIDE.md)
 ------------------------------------------------------------------
-# 前一天先確認能畫: python3 -c "import numpy, matplotlib; print('OK')"
+# 畫圖的東西都在 xwing_plot 資料夾, 指令在那裡執行
+cd ~/catkin_ws/src/hsu_realflight_true/xwing_plot
 
-# 只畫飛機 (flight_logs/ 最新那份):
+# 前一天先確認能畫:
+python3 -c "import numpy, matplotlib; print('OK')"
+python3 test_plot_report.py --vision        # 不用飛機, 最後出現 [test] 完成
+
+# 真車比較: 車子 SD 卡 LOGS/ 當天的 .BIN 放進 xwing_plot/car_bin/ (有放就自動比對)
+
+# ★ 全部畫 (flight_logs/ 每一份、每一趟):
+python3 xwing_plot_report.py --all
+
+# 只畫最新那份 / 指定的:
 python3 xwing_plot_report.py --latest
+python3 xwing_plot_report.py xwing_virtual_<時間>_flight1.csv
 
-# 指定 log:
-python3 xwing_plot_report.py flight_logs/xwing_virtual_<時間>_flight1.csv
-
-# 加真車 GPS 比較: 車子 SD 卡 LOGS/ 當天的 .BIN 複製到 car_bin/
-mkdir -p car_bin
-python3 xwing_plot_report.py --latest --car-bin-dir car_bin
-
-# 只畫第 2 趟: 加 --run 2      地面測試 / 沒切 GUIDED: 加 --full
+# 只畫第 2 趟: 加 --run 2   地面測試 / 沒切 GUIDED: 加 --full   不比對真車: 加 --no-car
 
 # 結果 (每一趟一個資料夾):
-plot_results/<log 檔名>/run1/report.pdf    ← 全部圖, 給老師看
-plot_results/<log 檔名>/run1/summary.txt   ← 時間線 + 數字 + 自動檢查 (⚠ = 建議看的參數)
+xwing_plot/plot_results/<log 檔名>/run1/report.pdf    ← 全部圖, 給老師看
+xwing_plot/plot_results/<log 檔名>/run1/summary.txt   ← 時間線 + 數字 + 自動檢查 (⚠ = 建議看的參數)
 
 
 ------------------------------------------------------------------

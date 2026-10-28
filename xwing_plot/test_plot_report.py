@@ -7,10 +7,11 @@
 用法: python3 test_plot_report.py            (一趟)
       python3 test_plot_report.py --two-runs (同一份 log 切兩次 GUIDED)
       python3 test_plot_report.py --vision   (加假雲台: pitch/roll 相對地面, 看真車 → 測 Fig 12)
-輸出: plot_test/ (log + car_bin/)  →  plot_results/xwing_virtual_<時間>_plottest/run1/"""
+輸出: xwing_plot/plot_test/ (log + car_bin/)  →  xwing_plot/plot_results/xwing_virtual_<時間>_plottest/run1/"""
 import sys, types, math, os, glob, shutil, struct, random, subprocess
-REPO = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(REPO, 'plot_test')
+HERE = os.path.dirname(os.path.abspath(__file__))       # xwing_plot/
+REPO = os.path.dirname(HERE)                             # 專案根目錄 (飛行程式在這)
+OUT = os.path.join(HERE, 'plot_test')
 TWO = '--two-runs' in sys.argv
 VIS = '--vision' in sys.argv
 sys.path.insert(0, REPO)
@@ -239,7 +240,7 @@ open(os.path.join(OUT, 'car_bin', '00000031.BIN'), 'wb').write(buf)
 print('bin ->', os.path.join(OUT, 'car_bin', '00000031.BIN'))
 
 print('\n[test] 開始畫圖 ...\n')
-r = subprocess.call([sys.executable, os.path.join(REPO, 'xwing_plot_report.py'),
+r = subprocess.call([sys.executable, os.path.join(HERE, 'xwing_plot_report.py'),
                      os.path.join(OUT, os.path.basename(c)),
                      '--car-bin-dir', os.path.join(OUT, 'car_bin')])
 print('\n[test] ' + ('完成 — 看 plot_results/ 裡的 report.pdf' if r == 0 else '畫圖失敗'))

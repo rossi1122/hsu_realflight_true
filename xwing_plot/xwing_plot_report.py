@@ -1546,15 +1546,27 @@ def analyse(R, st, events, gps_lines):
             if osc > 0.8 and r_ > 1.0:
                 msg.append(f'誤差來回擺盪 ({osc:.1f} Hz) → {kp}={C(kp):g} 可能太大')
             if abs(mn) > 1.5:
-                msg.append(f'後半段一直偏 {mn:+.1f}° 沒收斂 → {ki}={C(ki):g} 可能不夠 '
-                           + ('或方向舵不夠力 (Fig 10)' if ax_ == 'u' else '或 pitch 追不上 (Fig 2, Fig 7)'))
+                fb_ = L.num('lateral_fallback')[R.m('DIVE')]
+                if ax_ == 'u' and np.isfinite(fb_).any() and np.nanmax(fb_) > 0.5:
+                    msg.append(f'後半段一直偏 {mn:+.1f}° 沒收斂 → 這趟退回 legacy bank (見下方 ✗), 先修那個')
+                else:
+                    msg.append(f'後半段一直偏 {mn:+.1f}° 沒收斂 → {ki}={C(ki):g} 可能不夠 '
+                               + ('或方向舵不夠力 (Fig 10)' if ax_ == 'u' else '或 pitch 追不上 (Fig 2, Fig 7)'))
             if r_ > 5:
                 msg.append(f'RMSE {r_:.1f}° 很大 → 先看推頭時是否已經對準 (Fig 1 起點)')
             (warn if msg else ok)(f'{nm}影像誤差 RMSE {r_:.1f}°' + ('：' + '；'.join(msg) if msg else ''))
 
+        # 橫向退回 legacy bank (啟動時找不到 GUIDED_P / 43002 連續失敗) → DIVE 沒用方向舵
+        fb = L.num('lateral_fallback')[R.m('DIVE')]
+        legacy = bool(np.isfinite(fb).any() and np.nanmax(fb) > 0.5)
+        if legacy:
+            bad('lateral_fallback=1: 橫向退回 legacy bank, DIVE 用滾轉轉彎、方向舵完全沒用 '
+                '→ 終端機找「找不到 GUIDED_P」/「43002 連續失敗」; Mission Planner 查 GUIDED_P '
+                '(沒有 = 韌體不同, 燒跟 A 機一樣的韌體; 有 = MAVROS 參數還沒載完就啟動程式)')
+
         # 方向舵
         sp = st.get('rud_sat_pct')
-        if sp is not None and np.isfinite(sp):
+        if sp is not None and np.isfinite(sp) and not legacy:
             nums.append(f'方向舵 DIVE 最大 {st["rud_max"]:.1f}°, 打到限幅 {sp:.0f} % 時間, '
                         f'被 roll 保護限制 {st["rud_lim_roll_pct"]:.0f} %')
             if sp > 20:

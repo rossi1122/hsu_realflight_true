@@ -3,7 +3,7 @@
 資料: 飛控 BIN 00000001 (用 `xwing_plot/bin_extract.py` 抽出)。方法與 10/8 相同 (`test_records/20261008_xwing_flight`)。
 時間 0 = 飛控回報 Reached waypoint #2 (開始轉彎, 在轉彎點西方約 130 m)。
 拉平: |roll| ≤ 10° 持續 2 s;  對正+拉平: |roll| ≤ 10°、航跡 ±5°、側偏 ≤ 10 m 同時持續 3 s。
-當天西北風約 5~8 m/s (從 xwing_virtual log 估計)。圖: `turn_wp2_1029.png`
+當天西北風約 5~8 m/s (從 xwing_virtual log 估計)。圖: `turn_wp2_1029.png` (合併), `turn_wp2_1029_trajectory.png` (軌跡), `turn_wp2_1029_stats.png` (統計)
 
 | | 機翼拉平 | 拉平時離轉彎點 | 對正+拉平 | 對正時離轉彎點 | 對正時 空速 / 地速 | 備註 |
 |---|---|---|---|---|---|---|

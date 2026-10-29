@@ -29,6 +29,10 @@ Fig 2  姿態 (飛控有沒有跟上命令)     Fig 6  空速
 Fig 5  雲台當控制 vs 實際命令         Fig 15 雲台 vs 真車 (雲台準不準)
 Fig 14 虛擬目標 vs 真車 (車子出發時機)
 
+【log 太大傳不上來】 (只切出要分析的趟次, 再壓成 zip)
+   python cut_log.py                      → flight_logs\cut\<log 名>_cut.zip, 傳這個
+   python cut_log.py <log 檔名> --run 3 4  → 只切第 3、4 趟
+
 【出錯時】
 找不到 log        → flight_logs 要在 x-wing_virtual\flight_logs (不是 xwing_plot 裡)
 can't open file   → cmd 要從 xwing_plot 資料夾開

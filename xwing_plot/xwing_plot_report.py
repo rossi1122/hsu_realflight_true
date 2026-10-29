@@ -343,7 +343,7 @@ def fig6_rudder(R, path, title, pdf, st):
     for k, col, lab in (('lim_by_airspeed', '#FF7F0E', 'limited by airspeed'),
                         ('lim_by_roll', '#D62728', 'limited by roll')):
         f = L.num(k)
-        on = w & (f > 0)
+        on = w & (f < 0.99)          # 欄位是縮放係數: 1.0 = 沒被限制, < 1 = 被砍
         if on.any():
             ax[0].fill_between(t, -1e3, 1e3, where=on, color=col, alpha=.12, label=lab)
     yl = nanmax(np.abs(np.r_[raw[w], sent[w], lim[w]]))
@@ -362,7 +362,7 @@ def fig6_rudder(R, path, title, pdf, st):
         sat = np.abs(sent[d]) >= L_[d] - 0.5
         st['rud_sat_pct'] = 100.0 * sat.mean()
         st['rud_max'] = nanmax(np.abs(sent[d]))
-        st['rud_lim_roll_pct'] = 100.0 * np.nanmean(L.num('lim_by_roll')[d] > 0)
+        st['rud_lim_roll_pct'] = 100.0 * np.nanmean(L.num('lim_by_roll')[d] < 0.99)
         stat_box(ax[0], f'DIVE max |sent| {st["rud_max"]:5.1f}°\n'
                         f'at limit       {st["rud_sat_pct"]:5.1f} %\n'
                         f'roll-limited   {st["rud_lim_roll_pct"]:5.1f} %', 'lower left')
@@ -415,8 +415,17 @@ def fig10_system(R, path, title, pdf, st):
     fig, ax = plt.subplots(3, 1, figsize=(12, 8), sharex=True, layout='constrained')
     bv = L.num('batt_v')
     bv_ok = np.where(bv > 1.0, bv, np.nan)
-    ax[0].plot(t, bv_ok, color=C_ACT, label='battery V')
+    # MAVROS 的電池 topic 會輪流收到 BATT / BATT2 → 兩顆電壓差很多時分開畫
+    packs = [('battery V', bv_ok)]
+    if np.isfinite(bv_ok).sum() > 10 and nanmax(bv_ok) > 2.0 * nanmin(bv_ok):
+        thr = math.sqrt(nanmax(bv_ok) * nanmin(bv_ok))
+        packs = [('battery (low-V pack)', np.where(bv_ok < thr, bv_ok, np.nan)),
+                 ('battery (high-V pack)', np.where(bv_ok >= thr, bv_ok, np.nan))]
+    for (lab, v), col in zip(packs, (C_ACT, '#D62728')):
+        k = np.isfinite(v)
+        ax[0].plot(t[k], v[k], '.-', ms=2, lw=.8, color=col, label=lab)
     ax[0].set_ylabel('Battery (V)')
+    st['batt_packs'] = [(lab, nanmin(v)) for lab, v in packs]
     dt = L.num('dt') * 1000
     ax[1].plot(t, dt, color=C_ACT, lw=.8, label='loop period')
     ax[1].axhline(20, color=C_REF, ls='--', lw=.8, label='50 Hz = 20 ms')
@@ -1592,7 +1601,9 @@ def analyse(R, st, events, gps_lines):
             warn('控制迴路有卡頓 (>40 ms 或單次 >200 ms) → Orin 負載 / 其他程式')
         else:
             ok('控制迴路 50 Hz 正常')
-    if np.isfinite(st.get('batt_min', float('nan'))):
+    if st.get('batt_packs'):
+        nums.append('電壓最低: ' + ', '.join(f'{lab} {f1(v, 2)} V' for lab, v in st['batt_packs']))
+    elif np.isfinite(st.get('batt_min', float('nan'))):
         nums.append(f'電壓最低 {st["batt_min"]:.2f} V')
     if st.get('batt_bad_pct', 0) > 5:
         warn(f'batt_v 有 {st["batt_bad_pct"]:.0f} % 讀到 ≈0 V → 第二顆電池監測沒接 / BATT 參數')

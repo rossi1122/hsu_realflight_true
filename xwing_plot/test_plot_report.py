@@ -123,7 +123,7 @@ class FakeBridge:
             return {'brg_mask': 128, 'rudder_raw_deg': round(RUD['raw'], 2),
                     'rudder_cmd_deg': round(max(-30, min(30, RUD['raw'])), 2),
                     'rudder_sent_deg': round(RUD['sent'], 2), 'rudder_limit_deg': 30.0,
-                    'lim_by_airspeed': 0, 'lim_by_roll': int(abs(AC['roll']) > 25),
+                    'lim_by_airspeed': 1.0, 'lim_by_roll': (1.0 if abs(AC['roll']) <= 25 else 0.5),
                     'brg_thr': 0.05}
         return {'brg_mask': 132, 'brg_thr': 0.55}
     def send_tecs_targets_async(self, alt_m=None, speed_mps=None, tag='', on_done=None):

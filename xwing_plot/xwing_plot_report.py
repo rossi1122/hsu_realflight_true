@@ -1598,6 +1598,22 @@ def analyse(R, st, events, gps_lines):
                 else:
                     ok(f'拉平最低 {amin:.0f} m (設定 {C("PULLOUT_AGL_M"):g} m)')
 
+    # 空速計 vs GPS 速度 (DIVE 中風的影響相對小)
+    vg = L.num('v_gps') if 'v_gps' in L._num else None
+    if vg is not None:
+        k = R.m('DIVE') & np.isfinite(vg) & np.isfinite(V) & (vg > 5)
+        if k.sum() > 10:
+            ratio = nanmean(V[k] / vg[k])
+            nums.append(f'DIVE 空速計 / GPS 速度 = {ratio:.2f} (空速 {nanmean(V[k]):.1f}, GPS {nanmean(vg[k]):.1f} m/s)')
+            ga = L.num('gamma_air_deg') if 'gamma_air_deg' in L._num else None
+            n90 = int(np.sum(ga[k] <= -89.5)) if ga is not None else 0
+            if ratio < 0.75 or ratio > 1.3:
+                bad(f'空速計讀數跟 GPS 速度差很多 (比例 {ratio:.2f}) → 空速計 / ARSPD_RATIO 不準: '
+                    f'60 m/s 超速拉平、飛控 TECS 與舵面增益排程都會錯' +
+                    (f'; log 的 γ 有 {n90} 拍被夾在 −90° (圖已改用 GPS 速度算 γ)' if n90 else ''))
+            else:
+                ok(f'空速計 / GPS 速度 = {ratio:.2f}')
+
     # 風 / 側滑 (機頭 vs 地速方向): 機頭對準目標, 但實際航跡會偏到下風
     yawc = L.num('yaw_deg') if L.has('yaw_deg') else L.num('chi_deg')
     vn_, ve_, th_ = L.num('vn'), L.num('ve'), L.num('theta_deg')
@@ -1665,8 +1681,20 @@ def runs_of(L):
     return sorted(int(x) for x in np.unique(r[g & (r > 0)]))
 
 
+def gps_gamma(L):
+    """航跡角改用 GPS 速度算. 飛行程式記的 gamma_deg = asin(−vd / 空速),
+    空速計不準時會失真 (空速比下降速度還小 → 夾在 −90°). 原值留在 gamma_air_deg."""
+    vn, ve, vd = L.num('vn'), L.num('ve'), L.num('vd')
+    if not np.isfinite(vd).any():
+        return
+    L._num['gamma_air_deg'] = L.num('gamma_deg')
+    L._num['gamma_deg'] = np.degrees(np.arctan2(-vd, np.hypot(vn, ve)))
+    L._num['v_gps'] = np.sqrt(vn ** 2 + ve ** 2 + vd ** 2)
+
+
 def make_report(log_path, run, outdir, args, bins):
     L = Log.load(log_path)
+    gps_gamma(L)
     title = os.path.splitext(os.path.basename(log_path))[0]
     R = Run(L, run, full=args.full)
     events = [(tt, s) for tt, s in read_events(log_path)

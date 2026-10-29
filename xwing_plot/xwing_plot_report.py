@@ -142,6 +142,10 @@ class Log:
 
 def read_events(csv_path):
     p = csv_path[:-4] + '_events.txt' if csv_path.endswith('.csv') else None
+    if p and not os.path.isfile(p):
+        # cut_log.py 切出來的 <log>_runN.csv → 用原本 <log>_events.txt
+        p2 = re.sub(r'_run\d+_events\.txt$', '_events.txt', p)
+        p = p2 if os.path.isfile(p2) else None
     if not p or not os.path.isfile(p):
         return []
     # Orin (Linux) 寫的是 UTF-8; 在 Windows 跑 test_plot_report.py 時飛行程式用系統編碼 (cp950) 寫
@@ -1578,10 +1582,11 @@ def analyse(R, st, events, gps_lines):
     # 拉平
     for m in ('PULLOUT', 'ABORT'):
         if m in R.first:
-            k = t >= R.first[m]
+            k = (t >= R.first[m]) & (R.mode != '')      # 只算 GUIDED 中 (切 FBWA 後是飛手在飛)
             amin = nanmin(agl[k])
             i0 = np.argmin(np.abs(t - R.first[m]))
-            nums.append(f'{m} 開始 AGL {f1(agl[i0])} m / V {f1(V[i0])} m/s, 之後最低 AGL {f1(amin)} m')
+            nums.append(f'{m} 開始 AGL {f1(agl[i0])} m / V {f1(V[i0])} m/s, 之後最低 AGL {f1(amin)} m'
+                        f' (GUIDED 中)')
             if m == 'PULLOUT':
                 under = C('PULLOUT_AGL_M') - amin
                 if amin < C('ABORT_MIN_AGL_M'):
@@ -1592,6 +1597,27 @@ def analyse(R, st, events, gps_lines):
                          f'{under:.0f} m 或確認 TECS / pitch 上仰速度')
                 else:
                     ok(f'拉平最低 {amin:.0f} m (設定 {C("PULLOUT_AGL_M"):g} m)')
+
+    # 風 / 側滑 (機頭 vs 地速方向): 機頭對準目標, 但實際航跡會偏到下風
+    yawc = L.num('yaw_deg') if L.has('yaw_deg') else L.num('chi_deg')
+    vn_, ve_, th_ = L.num('vn'), L.num('ve'), L.num('theta_deg')
+    if np.isfinite(vn_).any() and np.isfinite(yawc).any():
+        course = np.degrees(np.arctan2(ve_, vn_))
+        crab = wrap180(yawc - course)
+        for m in ('SEARCH', 'DIVE'):
+            k = R.m(m) & np.isfinite(crab) & np.isfinite(V)
+            if k.sum() < 10:
+                continue
+            an = V[k] * np.cos(np.radians(th_[k])) * np.cos(np.radians(yawc[k]))
+            ae = V[k] * np.cos(np.radians(th_[k])) * np.sin(np.radians(yawc[k]))
+            wn, we = nanmean(vn_[k] - an), nanmean(ve_[k] - ae)
+            ws = math.hypot(wn, we)
+            cm = nanmean(crab[k])
+            nums.append(f'{m}: 機頭 − 地速方向 (偏航修正角) {cm:+.1f}°, 估計風 {ws:.1f} m/s '
+                        f'從 {math.degrees(math.atan2(-we, -wn)) % 360:.0f}° 吹來 (用空速估, 僅供參考)')
+            if m == 'DIVE' and abs(cm) > 4:
+                warn(f'DIVE 中機頭跟實際飛行方向差 {cm:+.1f}° (側風) → 虛擬相機跟機頭, PID 把機頭對準目標, '
+                     f'實際航跡會偏到下風 (側向落點偏差的主因之一)')
 
     # 系統
     if np.isfinite(st.get('dt_med', float('nan'))):

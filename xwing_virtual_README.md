@@ -71,6 +71,7 @@
 | `xwing_plot/test_plot_report.py` | (新) | 不用飛機測試畫圖流程 (`--vision` 加假雲台) |
 | `xwing_plot/PLOT_QUICK.txt` | (新) | ★ 實飛畫圖最簡流程 (一頁) |
 | `xwing_plot/cut_log.py` | (新) | 大 log 只切出指定趟次並壓成 zip (方便傳檔) |
+| `xwing_plot/bin_extract.py` | (新) | 飛控 BIN 只抽出轉彎分析要的資料 (航點、位置、姿態、GPS、空速), 存成小檔 |
 | `xwing_plot/PLOT_STEPS.txt` | (新) | ★ 筆電 (Windows) 畫圖步驟: 安裝、拷 log、畫圖指令 (照抄) |
 | `xwing_plot/PLOT_GUIDE.md` | (新) | 畫圖詳細說明 (每張圖看什麼、自動檢查門檻、雲台重放) |
 | `xwing_virtual_TEST_REPORT_20261020.md` | (新) | ★ 2026/10/20 雲台整合地面測試報告 (模式鍵、鎖定時間、資料鏈) |

@@ -154,6 +154,10 @@ def main():
     ap.add_argument('--start-pitch', type=float, default=-10.0,
                     help='開機時雲台 pitch (預設 −10)')
     ap.add_argument('--duration', type=float, default=0.0, help='秒, 0 = 一直跑')
+    ap.add_argument('--tx-off-at', type=float, default=None,
+                    help='重現 10/29 狀況: 第幾秒起停止送出 (仍照常收模式鍵)')
+    ap.add_argument('--tx-off-for', type=float, default=0.0,
+                    help='停送幾秒後恢復 (0 = 不恢復)')
     args = ap.parse_args()
 
     if args.pty:
@@ -183,6 +187,21 @@ def main():
 
         def read():
             return ser.read(4096)
+
+    t_start = time.monotonic()
+    if args.tx_off_at is not None:
+        _write_on = write
+        _said = {'off': False}
+
+        def write(b):
+            el = time.monotonic() - t_start
+            off = el >= args.tx_off_at and (args.tx_off_for <= 0
+                                            or el < args.tx_off_at + args.tx_off_for)
+            if off != _said['off']:
+                _said['off'] = off
+                print(f"[sim] ★ {el:.1f}s TX {'停止 (仍收模式鍵)' if off else '恢復'}", flush=True)
+            if not off:
+                _write_on(b)
 
     sim = Sim(write, args)
     period = 1.0 / args.hz

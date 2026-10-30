@@ -11,6 +11,13 @@ python3 xwing_virtual_flight.py --moving --case flight1 2>&1 | tee console_fligh
 
 沒有雲台: 指令裡加 --no-vision
 
+【雲台 (10/29 兩架都在起飛前/彈射時斷線, 之後再也沒回來)】
+  起飛前最後一刻 + 每次切 GUIDED 前: Terminal 2 要是 VIS link=1
+  出現「★RX無資料 Ns(TX=…)」或 events「★★ RX 斷線」= 對方的資料沒進來
+    → 先不要切 GUIDED; 落地後【不要重開任何程式】, 先請對方查他們的程式/dmesg
+  對方畫面顯示 LOCK ≠ 我們收得到資料, 以我們的 VIS link 為準
+  診斷檔自動存: flight_logs/<log 名>_uart_raw.bin / _uart_health.csv / _dmesg_*.txt
+
 【飛行中 Terminal 2】  x + Enter = 中止    q + Enter = 結束 (落地後)
                       最快中止: 飛手撥 FBWA
 【重飛】 不用重開程式: 切出 GUIDED → 下一圈到 WP3 再切 GUIDED = 新的一趟

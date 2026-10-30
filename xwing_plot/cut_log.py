@@ -104,6 +104,11 @@ def main():
         ev = os.path.join(srcdir, f'{stem}_events.txt')
         if os.path.isfile(ev):
             z.write(ev, os.path.basename(ev))
+        # 雲台 UART 傳輸診斷 (10/30 以後的飛行程式才有): 整份都放, 壓縮後通常只有幾 MB
+        for p in sorted(glob.glob(os.path.join(srcdir, f'{stem}_uart_*'))
+                        + glob.glob(os.path.join(srcdir, f'{stem}_dmesg_*.txt'))):
+            z.write(p, os.path.basename(p))
+            print(f'[cut] + {os.path.basename(p)} ({os.path.getsize(p) / 1e6:.1f} MB)')
     print(f'\n[cut] 完成 → {zp}  ({os.path.getsize(zp) / 1e6:.2f} MB)  ← 傳這個檔案')
 
 

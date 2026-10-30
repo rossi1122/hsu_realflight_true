@@ -495,6 +495,12 @@ def main():
           + (f"{vision.port} @ {vision.baud} 只記錄; 模式鍵 "
              f"{'ON ' + str(cfg.GIMBAL_MODE_KEYS) if gimbal_cmd else 'OFF'}"
              if vision is not None else "未啟用"))
+    if vision is not None and hasattr(vision, 'enable_diag'):
+        # ★ 2026/10/30: 雲台傳輸診斷 — RX 斷線 / 恢復寫進 events,
+        #   原始 byte 與每秒健康狀態另存 (<stem>_uart_raw.bin / _uart_health.csv)
+        vision.log = event
+        vision.rx_lost_s = cfg.VISION_STALE_S
+        vision.enable_diag(os.path.join(log_dir, stem))
 
     _sync_run = {'on': True}
 
@@ -881,8 +887,11 @@ def main():
                            if _np is not None else " | FC nav_* 無資料")
                     _vs = ''
                     if vision is not None:
+                        _ba = _vrow.get('vis_rx_byte_age_ms', '')
                         _vs = (f" | VIS link={_vrow['vis_link']} "
-                               f"det={_vrow['vis_valid'] if _vrow['vis_valid'] != '' else '-'} "
+                               + (f"★RX無資料{_ba / 1000:.0f}s(TX={_vrow['vis_tx_bytes']}) "
+                                  if _ba != '' and _ba > 2000 else '')
+                               + f"det={_vrow['vis_valid'] if _vrow['vis_valid'] != '' else '-'} "
                                f"gmode={_vrow['vis_gimbal_mode'] if _vrow['vis_gimbal_mode'] != '' else '-'}"
                                f"(req {_vrow['gimbal_mode_req'] or '-'}) "
                                f"gpitch={_vrow['vis_gimbal_pitch'] if _vrow['vis_gimbal_pitch'] != '' else '-'}"

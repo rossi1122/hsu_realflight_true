@@ -15,19 +15,34 @@ xwing_uart_vision.py — 接收對方實驗室 Orin NX 送來的雲台視覺資�
   · 依任務狀態送模式鍵給對方雲台 (預設關閉, 見 GIMBAL_MODE_CMD_ENABLED),
     並用回傳的 mode 欄位確認, 沒確認就重送
   · USB 拔插 / 串口錯誤 → 自動重開, 不讓主程式掛掉
+  · ★ 2026/10/30 傳輸診斷 (enable_diag 之後):
+      <prefix>_uart_raw.bin     收 / 送的每一個 byte + 時間戳 (xwing_plot/uart_diag.py 解讀)
+      <prefix>_uart_health.csv  每秒一列: 收送 byte 數、封包數、錯誤、驅動層計數、埠是否存在
+      <prefix>_dmesg_*.txt      RX 斷線當下的 kernel 訊息 (USB 斷線 / 重新列舉)
+    RX 斷線 / 恢復時寫 events, 斷線期間每 30 s 回報 TX 是否仍在送.
+    用途: 分辨「對方沒送」「線斷 (RX 沒訊號)」「我們這端 USB 掉了」.
 
 主程式只要:
     vis = UartVisionLink(port, baud); vis.start()
+    vis.enable_diag('flight_logs/xwing_virtual_XXXX')   # 可選
     pkt = vis.latest()          # 最新一筆 (dict) 或 None
     vis.request_mode('1')       # 要求對方切模式 (None = 不要求)
     vis.stop()
 """
 
+import array
+import json
 import math
 import os
 import struct
+import subprocess
 import threading
 import time
+
+try:
+    import fcntl                    # Linux 才有 (Windows 畫圖筆電 import 本模組時沒有)
+except ImportError:
+    fcntl = None
 
 try:
     import serial
@@ -58,6 +73,49 @@ def _finite(x):
     return x is not None and isinstance(x, (int, float)) and math.isfinite(x)
 
 
+# ── 原始 byte 紀錄格式 (uart_diag.py 解讀) ─────────────────────────
+#  檔頭: RAW_MAGIC + 一行 JSON (開始時的 wall / monotonic 時間、埠、鮑率) + '\n'
+#  之後每筆: <QBH> = (monotonic_ns, 種類, 長度) + 資料
+RAW_MAGIC = b'XWUARTRAW1\n'
+RAW_REC = struct.Struct('<QBH')
+RAW_RX, RAW_TX, RAW_NOTE = 0, 1, 2
+
+# Linux TIOCGICOUNT: 驅動層計數 (就算資料沒通過我們的解碼也會算到)
+_TIOCGICOUNT = 0x545D
+ICOUNT_FIELDS = ('cts', 'dsr', 'rng', 'dcd', 'rx', 'tx', 'frame', 'overrun',
+                 'parity', 'brk', 'buf_overrun')
+
+HEALTH_FIELDS = [
+    't_mono', 'wall', 'port_exists', 'port_real', 'open',
+    'rx_bytes', 'tx_bytes', 'rx_bytes_1s', 'tx_bytes_1s', 'frames_1s', 'clock_1s',
+    'frames', 'clock', 'crc', 'header', 'payload', 'discarded', 'serial_err',
+    'reopen', 'mode_tx', 'last_rx_age_s', 'last_frame_age_s',
+    'partner_rid', 'partner_mode', 'partner_pitch', 'mode_req', 'in_waiting',
+] + ['drv_' + k for k in ICOUNT_FIELDS] + ['line_cts', 'line_dsr', 'line_ri', 'line_cd']
+
+
+def _icount(ser):
+    """驅動層計數 dict; 不支援就回 None."""
+    if fcntl is None or ser is None:
+        return None
+    try:
+        buf = array.array('i', [0] * 20)
+        fcntl.ioctl(ser.fileno(), _TIOCGICOUNT, buf, True)
+        return dict(zip(ICOUNT_FIELDS, buf))
+    except Exception:
+        return None
+
+
+class _TxTap:
+    """給 UARTClock.request 用的 ser 替身: 寫入照常, 同時記錄 TX."""
+
+    def __init__(self, link):
+        self._link = link
+
+    def write(self, data):
+        return self._link._write(data)
+
+
 # ══════════════════════════════════════════════════════════════════
 #  主程式寫進 CSV 的欄位
 # ══════════════════════════════════════════════════════════════════
@@ -78,6 +136,8 @@ VISION_CSV_FIELDS = [
     'gimbal_state', 'gimbal_mode_req', 'gimbal_mode_ok',
     'gimbal_locked',     # 1 = 對方回報鎖定模式, 且 pitch 已到 −30° ± 容差 (機械到位)
     'vis_frames', 'vis_crc_err',
+    'vis_rx_bytes', 'vis_tx_bytes',      # 累計收 / 送 byte (斷線時看 TX 是否仍在送)
+    'vis_rx_byte_age_ms',                # 距離「收到任何 byte」多久 (封包壞掉也算有收到)
 ]
 
 
@@ -118,8 +178,24 @@ class UartVisionLink:
         self._open_fail = 0
         self.stats = {'frames': 0, 'clock': 0, 'bytes': 0, 'header': 0,
                       'crc': 0, 'payload': 0, 'discarded': 0, 'reopen': 0,
-                      'mode_tx': 0, 'serial_err': 0, 'open_fail': 0}
+                      'mode_tx': 0, 'serial_err': 0, 'open_fail': 0,
+                      'tx_bytes': 0, 'rx_gaps': 0}
         self.connected = False
+
+        # ── 傳輸診斷 (enable_diag 之後才寫檔) ──
+        self.rx_lost_s = 2.0           # 這麼久沒收到任何 byte → 判定 RX 斷線
+        self.last_rx_byte_mono = None  # 最後一次收到任何 byte (monotonic 秒)
+        self.last_frame_mono = None    # 最後一次收到有效資料封包
+        self._diag_prefix = None
+        self._raw = None
+        self._health = None
+        self._health_t = 0.0
+        self._health_prev = None
+        self._rx_down_t = None         # RX 斷線開始時刻 (None = 正常)
+        self._rx_down_tx0 = 0          # 斷線開始時已送出的 TX byte
+        self._rx_down_report_t = 0.0
+        self._dmesg_n = 0
+        self._t_start = time.monotonic()
 
     # ------------------------------------------------------------------
     def start(self):
@@ -133,6 +209,39 @@ class UartVisionLink:
         if self._thread is not None:
             self._thread.join(timeout=1.0)
         self._close()
+        self._raw_note('stop')
+        for f in (self._raw, self._health):
+            try:
+                if f is not None:
+                    f.flush()
+                    f.close()
+            except (OSError, ValueError):
+                pass
+        self._raw = self._health = None
+
+    def enable_diag(self, prefix):
+        """開始寫傳輸診斷檔 (prefix = log 路徑去掉 .csv). 失敗只印警告, 不影響收資料."""
+        try:
+            raw = open(prefix + '_uart_raw.bin', 'wb')
+            raw.write(RAW_MAGIC + json.dumps({
+                'wall': time.time(), 'mono_ns': time.monotonic_ns(),
+                'port': self.port, 'baud': self.baud}).encode() + b'\n')
+            health = open(prefix + '_uart_health.csv', 'w', buffering=1)
+            health.write(','.join(HEALTH_FIELDS) + '\n')
+        except OSError as e:
+            self.log(f"[UARTVision] ★ 診斷檔開不了: {e} (只影響診斷, 資料照收)")
+            return False
+        with self._lock:
+            self._diag_prefix = prefix
+            self._raw, self._health = raw, health
+        self.log(f"[UARTVision] 傳輸診斷 → {os.path.basename(prefix)}_uart_raw.bin / "
+                 f"_uart_health.csv")
+        return True
+
+    def rx_byte_age(self, now_mono=None):
+        """距離最後收到任何 byte 幾秒 (從沒收過 = 從啟動算起)."""
+        t = self.last_rx_byte_mono
+        return (now_mono or time.monotonic()) - (self._t_start if t is None else t)
 
     def latest(self):
         """最新一筆封包 (dict 副本) 或 None."""
@@ -186,6 +295,7 @@ class UartVisionLink:
                 xonxoff=False, rtscts=False, dsrdtr=False)
             self._buf.clear()
             self.connected = True
+            self._raw_note(f'open {self.port} -> {os.path.realpath(self.port)}')
             self.log(f"[UARTVision] 已開啟 {self.port} @ {self.baud} 8N1"
                      + (f" (失敗 {self._open_fail} 次後恢復)" if self._open_fail else ""))
             self._open_fail = 0
@@ -205,14 +315,151 @@ class UartVisionLink:
         try:
             if self._ser is not None:
                 self._ser.close()
+                self._raw_note('close')
         except Exception:
             pass
         self._ser = None
         self.connected = False
 
+    # ── 傳輸診斷 ──────────────────────────────────────────────────────
+    def _write(self, data):
+        """所有送出的 byte 都走這裡 (模式鍵 / 校時請求), 順便記錄 TX."""
+        n = self._ser.write(data)
+        self.stats['tx_bytes'] += n or 0
+        self._raw_put(RAW_TX, data[:n] if n else b'')
+        return n
+
+    def _raw_put(self, kind, data):
+        f = self._raw
+        if f is None:
+            return
+        try:
+            f.write(RAW_REC.pack(time.monotonic_ns(), kind, len(data)) + data)
+        except (OSError, ValueError):
+            pass
+
+    def _raw_note(self, text):
+        self._raw_put(RAW_NOTE, text.encode('utf-8')[:1000])
+
+    def _diag_tick(self, now):
+        """背景執行緒每圈呼叫: RX 斷線偵測 + 每秒健康紀錄."""
+        st = self.stats
+        age = None if self.last_rx_byte_mono is None else now - self.last_rx_byte_mono
+        ref = self.last_rx_byte_mono if self.last_rx_byte_mono is not None else self._t_start
+        if self._rx_down_t is None and now - ref > self.rx_lost_s:
+            self._rx_down_t = ref
+            self._rx_down_tx0 = st['tx_bytes']
+            self._rx_down_report_t = now
+            st['rx_gaps'] += 1
+            ic = _icount(self._ser)
+            msg = (f"[UARTVision] ★★ RX 斷線: {now - ref:.1f}s 沒收到任何 byte "
+                   f"(埠 {'存在' if os.path.exists(self.port) else '★不存在'}"
+                   f", 串口 {'開著' if self._ser is not None else '★關閉'}"
+                   f", 累計 RX {st['bytes']} / TX {st['tx_bytes']} bytes"
+                   + (f", 驅動 rx={ic['rx']} frame={ic['frame']} brk={ic['brk']}"
+                      f" overrun={ic['overrun']}" if ic else '')
+                   + (f", 最後封包 id={self._latest.get('result_id')}" if self._latest else '')
+                   + ")")
+            self._raw_note(msg)
+            self.log(msg)
+            self._dmesg_snapshot('rxlost')
+        elif self._rx_down_t is not None:
+            if age is not None and age < self.rx_lost_s and self.last_rx_byte_mono > self._rx_down_t:
+                gap = self.last_rx_byte_mono - self._rx_down_t
+                msg = (f"[UARTVision] RX 恢復: 中斷 {gap:.1f}s, 期間 TX 送出 "
+                       f"{st['tx_bytes'] - self._rx_down_tx0} bytes")
+                self._raw_note(msg)
+                self.log(msg)
+                self._rx_down_t = None
+            elif now - self._rx_down_report_t >= 30.0:
+                self._rx_down_report_t = now
+                ic = _icount(self._ser)
+                msg = (f"[UARTVision] ★ RX 仍斷線 {now - self._rx_down_t:.0f}s; TX 期間送出 "
+                       f"{st['tx_bytes'] - self._rx_down_tx0} bytes (我們這邊有在送)"
+                       + (f"; 驅動 rx={ic['rx']} frame={ic['frame']} brk={ic['brk']}" if ic else ''))
+                self._raw_note(msg)
+                self.log(msg)
+
+        if self._health is None or now - self._health_t < 1.0:
+            return
+        self._health_t = now
+        prev = self._health_prev or {}
+        ic = _icount(self._ser) or {}
+        lines = {}
+        if self._ser is not None:
+            for k, attr in (('line_cts', 'cts'), ('line_dsr', 'dsr'),
+                            ('line_ri', 'ri'), ('line_cd', 'cd')):
+                try:
+                    lines[k] = int(getattr(self._ser, attr))
+                except Exception:
+                    lines[k] = ''
+        try:
+            inw = self._ser.in_waiting if self._ser is not None else ''
+        except Exception:
+            inw = ''
+        lt = self._latest or {}
+        row = {
+            't_mono': f'{now:.3f}', 'wall': f'{time.time():.3f}',
+            'port_exists': int(os.path.exists(self.port)),
+            'port_real': os.path.realpath(self.port),
+            'open': int(self._ser is not None),
+            'rx_bytes': st['bytes'], 'tx_bytes': st['tx_bytes'],
+            'rx_bytes_1s': st['bytes'] - prev.get('bytes', st['bytes']),
+            'tx_bytes_1s': st['tx_bytes'] - prev.get('tx_bytes', st['tx_bytes']),
+            'frames_1s': st['frames'] - prev.get('frames', st['frames']),
+            'clock_1s': st['clock'] - prev.get('clock', st['clock']),
+            'last_rx_age_s': '' if age is None else f'{age:.3f}',
+            'last_frame_age_s': ('' if self.last_frame_mono is None
+                                 else f'{now - self.last_frame_mono:.3f}'),
+            'partner_rid': lt.get('result_id', ''), 'partner_mode': lt.get('mode', ''),
+            'partner_pitch': (f"{lt['pitch']:.2f}" if _finite(lt.get('pitch')) else ''),
+            'mode_req': self._mode_req or '', 'in_waiting': inw,
+        }
+        for k in ('frames', 'clock', 'crc', 'header', 'payload', 'discarded',
+                  'serial_err', 'reopen', 'mode_tx'):
+            row[k] = st[k]
+        for k in ICOUNT_FIELDS:
+            row['drv_' + k] = ic.get(k, '')
+        row.update(lines)
+        self._health_prev = dict(st)
+        try:
+            self._health.write(','.join(str(row.get(k, '')) for k in HEALTH_FIELDS) + '\n')
+            if self._raw is not None:
+                self._raw.flush()
+        except (OSError, ValueError):
+            pass
+
+    def _dmesg_snapshot(self, tag):
+        """RX 斷線當下的 kernel 訊息存檔 (背景執行, 最多 5 份)."""
+        if self._diag_prefix is None or self._dmesg_n >= 5:
+            return
+        self._dmesg_n += 1
+        path = f"{self._diag_prefix}_dmesg_{self._dmesg_n}_{tag}.txt"
+
+        def run():
+            out = []
+            for cmd in (['dmesg', '-T'], ['journalctl', '-k', '-n', '200', '--no-pager', '-o', 'short-iso']):
+                try:
+                    r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                    text = (r.stdout or '') + (r.stderr or '')
+                    out.append(f"$ {' '.join(cmd)}  (exit {r.returncode})\n"
+                               + '\n'.join(text.splitlines()[-200:]))
+                except Exception as e:
+                    out.append(f"$ {' '.join(cmd)}  失敗: {e}")
+            try:
+                with open(path, 'w') as f:
+                    f.write(f"# {time.strftime('%Y-%m-%d %H:%M:%S')}  埠 {self.port} -> "
+                            f"{os.path.realpath(self.port)}  存在={os.path.exists(self.port)}\n\n")
+                    f.write('\n\n'.join(out) + '\n')
+            except OSError:
+                pass
+        threading.Thread(target=run, daemon=True).start()
+
     def _loop(self):
         last_open_try = 0.0
+        tap = _TxTap(self)
         while self._running:
+            self._diag_tick(time.monotonic())
             if self._ser is None:
                 now = time.monotonic()
                 if now - last_open_try < 1.0:
@@ -225,12 +472,14 @@ class UartVisionLink:
                     self.stats['reopen'] += 1
             try:
                 if self._clock_enabled:
-                    self.clock.request(self._ser)     # v7 校時, 內部每 2 s 一次
+                    self.clock.request(tap)           # v7 校時, 內部每 2 s 一次
                 self._service_mode_tx()
                 n = self._ser.in_waiting
                 data = self._ser.read(min(4096, max(1, n)))
                 rx_ns = time.monotonic_ns()
                 if data:
+                    self.last_rx_byte_mono = rx_ns / 1e9
+                    self._raw_put(RAW_RX, data)
                     self.stats['bytes'] += len(data)
                     self._buf.extend(data)
                     while True:
@@ -240,10 +489,12 @@ class UartVisionLink:
                         self._handle(got[0], got[1], rx_ns)
             except (serial.SerialException, OSError) as e:
                 self.stats['serial_err'] += 1
+                self._raw_note(f'serial error: {e}')
                 self.log(f"[UARTVision] ★ 串口錯誤: {e} → 關閉後重開")
                 self._close()
             except Exception as e:                  # 解碼以外的意外, 不讓執行緒死掉
                 self.stats['serial_err'] += 1
+                self._raw_note(f'exception: {type(e).__name__}: {e}')
                 self.log(f"[UARTVision] ★ 例外: {type(e).__name__}: {e}")
                 time.sleep(0.05)
 
@@ -292,6 +543,7 @@ class UartVisionLink:
             return
         self._clock_enabled = (version == 7)
         self.stats['frames'] += 1
+        self.last_frame_mono = rx_ns / 1e9
         d = dict(zip((name for name, _ in BASE_FIELDS), values))
         d['ver'] = version
         d['rx_mono'] = rx_ns / 1e9
@@ -351,7 +603,7 @@ class UartVisionLink:
             return
         if now - sent_t < self.mode_resend_s:
             return
-        if self._ser.write(key.encode('ascii')) != 1:
+        if self._write(key.encode('ascii')) != 1:
             raise OSError('模式鍵寫入不完整')
         self.stats['mode_tx'] += 1
         with self._lock:
@@ -373,7 +625,12 @@ def vision_row(link, pkt, last_result_id, now_mono, ctrl_fx, ctrl_fy,
     row.update(gimbal_state=gimbal_state,
                gimbal_mode_req=req if req is not None else '',
                gimbal_mode_ok=int(ok),
-               vis_frames=link.stats['frames'], vis_crc_err=link.stats['crc'])
+               vis_frames=link.stats['frames'], vis_crc_err=link.stats['crc'],
+               vis_rx_bytes=link.stats.get('bytes', ''),
+               vis_tx_bytes=link.stats.get('tx_bytes', ''))
+    _ba = getattr(link, 'rx_byte_age', None)
+    _ba = _ba(now_mono) if _ba is not None else None
+    row['vis_rx_byte_age_ms'] = round(_ba * 1000.0, 1) if _ba is not None else ''
     if pkt is None:
         row['vis_link'] = 0
         return row, last_result_id

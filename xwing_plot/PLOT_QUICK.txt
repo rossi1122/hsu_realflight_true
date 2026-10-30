@@ -42,6 +42,10 @@ Fig 14 虛擬目標 vs 真車 (車子出發時機)
 
 【雲台什麼時候有資料 / 斷線時飛機在哪】 (要用完整 log, 不是 cut 的)
    python gimbal_timeline.py <log 檔名>    → 有資料的時段 + 當時 AGL/空速 + 每趟涵蓋率
+【雲台斷線原因】 (10/30 以後的飛行程式; flight_logs 要有 <log 名>_uart_raw.bin)
+   python uart_diag.py <log 檔名>          → plot_results\<log 名>\uart\uart_diag.txt + .png
+   看「斷線期間我們送出」(TX 正常?) 和「對方封包編號跳多少」(對方有沒有在算)
+   cut_log.py 產生的 zip 會自動附上這些診斷檔
 
 【出錯時】
 找不到 log        → flight_logs 要在 x-wing_virtual\flight_logs (不是 xwing_plot 裡)

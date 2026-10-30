@@ -36,6 +36,9 @@ Fig 14 虛擬目標 vs 真車 (車子出發時機)
 【飛控 BIN 太大傳不上來】 (只抽出轉彎分析要的部分, 幾百 MB → 1~3 MB)
    python bin_extract.py <飛控 BIN 路徑>   → <BIN 名>_turns.json.gz, 傳這個
 
+【雲台什麼時候有資料 / 斷線時飛機在哪】 (要用完整 log, 不是 cut 的)
+   python gimbal_timeline.py <log 檔名>    → 有資料的時段 + 當時 AGL/空速 + 每趟涵蓋率
+
 【出錯時】
 找不到 log        → flight_logs 要在 x-wing_virtual\flight_logs (不是 xwing_plot 裡)
 can't open file   → cmd 要從 xwing_plot 資料夾開

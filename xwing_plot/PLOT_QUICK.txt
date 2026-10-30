@@ -33,6 +33,10 @@ Fig 14 虛擬目標 vs 真車 (車子出發時機)
    python cut_log.py                      → flight_logs\cut\<log 名>_cut.zip, 傳這個
    python cut_log.py <log 檔名> --run 3 4  → 只切第 3、4 趟
 
+【整份 CSV 要傳, 但超過上限】 (切成幾份, 每份都有表頭; --zip 每份再壓縮)
+   python split_csv.py <log 檔名> --zip          → flight_logs\split\<log 名>_part1of3.zip ...
+   python split_csv.py <log 檔名> --parts 4 --zip
+
 【飛控 BIN 太大傳不上來】 (只抽出轉彎分析要的部分, 幾百 MB → 1~3 MB)
    python bin_extract.py <飛控 BIN 路徑>   → <BIN 名>_turns.json.gz, 傳這個
 

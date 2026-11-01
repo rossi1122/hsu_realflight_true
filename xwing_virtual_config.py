@@ -204,8 +204,9 @@ class XwingVirtualConfig:
     REARM_OFF_S = 1.0           # 離開 GUIDED 超過此秒數 → 這趟結束, 下次撥 GUIDED 重新種點
                                 #   (短於此 = 當作模式跳動, 不重置)
     # 撥 GUIDED 時 (空中) 不符合下列條件 → 不啟動任務. 掛機 (--bench) / 地面不檢查.
-    ARM_MIN_MARGIN_M = 100.0    # 離起點至少 = 推頭距離 + 此值 (416 + 100 = 516 m; 11/01 任務 WP3 = 571 m)
-                                #   追擊接近率 20 m/s → SEARCH 至少約 5 s
+    ARM_MIN_MARGIN_M = 70.0     # 離起點至少 = 推頭距離 + 此值 (416 + 70 = 486 m; 11/01 任務 WP3 = 571 m)
+                                #   追擊接近率 20 m/s → SEARCH 至少約 3.5 s
+                                #   (2026/11/01 從 100 改 70: 新任務 WP3 離起點只有 571 m, 讓 WP3 後多約 4 s 可切)
     ARM_MAX_DIST_M = 1500.0     # 離起點超過此值 → 不啟動 (不在 WP3 附近 / --start 打錯)
     ARM_MAX_BEARING_OFF_DEG = 45.0  # 起點偏離機頭超過此角度 → 不啟動 (已飛過 / 方向錯)
                                 #   PRE_DIVE 不修橫向. 模擬: 在 WP3 (613 m) 偏 45° 仍能對準 (側偏 ~10 m);

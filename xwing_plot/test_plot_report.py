@@ -188,14 +188,16 @@ class FakeVision:
             oy = self.FY * c[1] / c[2] + random.gauss(0, 3)
             ok = abs(ox) < self.W / 2 and abs(oy) < self.H / 2 and random.random() < 0.95
         self.stats['frames'] = rid
-        return {'rx_mono': now - 0.01, 'result_id': rid, 'ver': 7, 'valid': bool(ok),
+        laser = math.sqrt(dn * dn + de * de + h * h) + random.gauss(0, 1) if ok else float('nan')
+        return {'rx_mono': now - 0.01, 'result_id': rid, 'ver': 8, 'valid': bool(ok),
                 'target_cx': self.W / 2 + ox, 'target_cy': self.H / 2 + oy,
                 'offset_x': ox if ok else 0.0, 'offset_y': oy if ok else 0.0,
                 'fx': self.FX, 'fy': self.FY, 'cx': self.W / 2, 'cy': self.H / 2,
                 'image_width': self.W, 'image_height': self.H,
                 'pitch': self.gp + random.gauss(0, 0.1), 'roll': random.gauss(0, 0.2),
                 'mode': self.mode, 'detection_age_ms': 30.0, 'angle_age_ms': 5.0,
-                'e2e_ms': 80.0, 'e2e_err_ms': 2.0, 'cap_mono': now - 0.08}
+                'e2e_ms': 80.0, 'e2e_err_ms': 2.0, 'cap_mono': now - 0.08,
+                'laser_distance_m': laser}                          # v8: 雷射測到真車的斜距
 
 import numpy as _np
 F_R_G2C = _np.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]], dtype=float)

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""共用 UART v6／v7 接收程式，使用 big-endian 與 CRC-16/CCITT-FALSE。
+"""共用 UART v8 接收程式，使用 big-endian 與 CRC-16/CCITT-FALSE。
 
-資料區 61 bytes，完整封包 71 bytes；NaN/Inf 顯示為 N/A。
+v8 資料區 77 bytes，完整封包 87 bytes；NaN/Inf 顯示為 N/A。
 v7 使用 UART 往返校時估算取像至接收驗證延遲，並顯示校時不確定範圍。
 """
 
@@ -24,7 +24,7 @@ FIELD_LABELS = (
     "目標中心 X", "目標中心 Y", "水平偏移量", "垂直偏移量",
     "水平焦距 fx", "垂直焦距 fy", "光學中心 X", "光學中心 Y",
     "影像寬度", "影像高度", "雲台 Pitch 角度", "雲台 Roll 角度", "目前模式",
-    "結果編號", "影像資料年齡", "角度資料年齡",
+    "result_id", "detection_age_ms", "angle_age_ms", "雷射距離",
 )
 
 # Orin NX 接 USB 轉 UART：請用 python3 -m serial.tools.list_ports -v 確認裝置。
@@ -58,6 +58,7 @@ BASE_FIELDS = [
     ("result_id", ""),
     ("detection_age_ms", "ms"),
     ("angle_age_ms", "ms"),
+    ("laser_distance_m", "m"),
 ]
 
 
@@ -86,7 +87,7 @@ def decode_frame(frame):
     magic, version, flags, length, length_xor = struct.unpack(
         HEADER_FMT, frame[:HEADER_SIZE]
     )
-    expected = {(6, 0): BASE_SIZE, (7, 0): BASE_SIZE+12, (7, 2): 28}.get((version, flags))
+    expected = {(6, 0): BASE_SIZE, (7, 0): BASE_SIZE+12, (8, 0): BASE_SIZE+16, (7, 2): 28}.get((version, flags))
     if magic != FRAME_MAGIC or expected is None:
         raise ValueError('不支援的封包版本或類型')
     if length != expected or length_xor != (length ^ 0xFFFF) or len(frame) != HEADER_SIZE+length+CRC_SIZE:
@@ -96,7 +97,11 @@ def decode_frame(frame):
         raise ValueError("CRC mismatch")
     if flags == 2:
         return None, crc_recv
-    return decode_base(frame[HEADER_SIZE:HEADER_SIZE+BASE_SIZE]), crc_recv
+    values = decode_base(frame[HEADER_SIZE:HEADER_SIZE+BASE_SIZE])
+    distance = struct.unpack('>f', frame[-6:-2])[0] if version == 8 else float('nan')
+    if not math.isfinite(distance) or distance < 0:
+        distance = float('nan')
+    return values + (distance,), crc_recv
 
 
 class UARTClock:
@@ -142,9 +147,9 @@ class UARTClock:
         self.samples.append((received, session, offset, rtt/2))
 
     def estimate(self, frame, received, result_id):
-        if frame[2] != 7:
+        if frame[2] not in (7, 8):
             return '端到端：N/A（v6 沒有取像時間戳）'
-        capture, session = struct.unpack('>QI', frame[8+BASE_SIZE:-2])
+        capture, session = struct.unpack('>QI', frame[8+BASE_SIZE:8+BASE_SIZE+12])
         candidates = [s for s in self.samples if s[1] == session and 0 <= received-s[0] <= 10_000_000_000]
         if not capture:
             return '端到端：N/A（發送端影像時間戳為零，請確認辨識端主程式版本）'
@@ -178,6 +183,8 @@ def convert_value(index, value):
     if not math.isfinite(value):
         return "N/A"
     unit = BASE_FIELDS[index][1]
+    if index == 16:
+        return f'{value:.1f} {unit}'
     if index in (8, 9):
         return f"{value:g} {unit}"
     return f"{value:.3f} {unit}"
@@ -251,7 +258,7 @@ class UARTReceiver:
                 self.rx_errors["crc"] += 1
                 del self.buffer[0]
                 continue
-            expected = {(6, 0): BASE_SIZE, (7, 0): BASE_SIZE+12, (7, 2): 28}.get((version, flags))
+            expected = {(6, 0): BASE_SIZE, (7, 0): BASE_SIZE+12, (8, 0): BASE_SIZE+16, (7, 2): 28}.get((version, flags))
             if (expected is None or length != expected
                     or length_xor != (length ^ 0xFFFF)):
                 self.rx_errors["header"] += 1
@@ -269,8 +276,8 @@ class UARTReceiver:
                 del self.buffer[0]
                 continue
             self.received_ns = time.monotonic_ns()
-            # 只有看見新發送器的 v7 資料才送校時，避免舊發送器誤認二進位為模式鍵。
-            self.clock_enabled = version == 7
+            # 只有看見 v7／v8 資料才送校時，避免舊發送器誤認二進位為模式鍵。
+            self.clock_enabled = version in (7, 8)
             del self.buffer[:frame_size]
             return frame
 
@@ -301,6 +308,7 @@ class UARTReceiver:
                 rate = recent_bytes / max(0.001, now - self.last_diagnostic)
                 self.last_diagnostic = now
                 self.diagnostic_rx_bytes = self.rx_bytes
+                print("雷射距離：N/A")
                 if recent_bytes == 0:
                     print(f"[等待資料] {self.port} 未收到新資料；請確認串口、TX/RX 交叉接線與發送端。")
                 else:
@@ -363,7 +371,7 @@ class UARTReceiver:
             return decoded
         self.last_display = now
         print("=" * 78)
-        print(f"UART v{frame[2]} | 16 values | payload={len(frame)-10} B | frame={len(frame)} B | CRC=OK 0x{crc_recv:04X}")
+        print(f"UART v{frame[2]} | {len(values)} values | payload={len(frame)-10} B | frame={len(frame)} B | CRC=OK 0x{crc_recv:04X}")
         print(f"UART wire time (8N1 estimate): {wire_ms:.3f} ms")
         print(f"RX validation/decode: {processing_ms:.3f} ms | avg={sum(self.processing_times) / len(self.processing_times):.3f} ms")
         print(latency_text)
@@ -414,7 +422,7 @@ def main():
     except (RuntimeError, OSError, ValueError) as error:
         print(f'接收端啟動失敗：{error}')
         raise SystemExit(1)
-    print(f"UART Receiver v6/v7 Started: {rx.port} @ {UART_BAUD}, 8N1；v7 自動 UART 校時")
+    print(f"UART Receiver v6/v7/v8 Started: {rx.port} @ {UART_BAUD}, 8N1；v7 自動 UART 校時")
     try:
         print("0：手動；1：追蹤；2：鎖定；Q / Esc：結束。請聚焦此終端。")
         with keyboard_input():

@@ -94,7 +94,7 @@ Fig 4  下滑角: γ vs −30°、誤差               Fig 4b 雲台偵測率長
 Fig 5  PID 重放: 虛擬目標 vs 雲台資料, 重算的航向 / pitch 命令 (有雲台)
 Fig 6  空速 + 各階段統計表
 Fig 7  控制迴路誤差
-Fig 8  雲台 pitch / roll / 模式 (有雲台)
+Fig 8  雲台 pitch / roll / 模式 (有雲台); v8 多 (d) 雷射距離
 Fig 9  DIVE 俯視軌跡
 ── Fig 10~15: X-wing 才有的診斷圖 ──
 Fig 10 方向舵: 舵量、限幅、被 roll 保護限制     → K_LAT_TO_RUDDER、ROLL_PROT

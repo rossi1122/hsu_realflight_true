@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-xwing_uart_vision.py — 接收對方實驗室 Orin NX 送來的雲台視覺資料 (UART v6/v7)
+xwing_uart_vision.py — 接收對方實驗室 Orin NX 送來的雲台視覺資料 (UART v6/v7/v8)
 ═══════════════════════════════════════════════════════════════════
 架構:
     [雲台相機] → [對方 Orin NX: 辨識 + 雲台控制] ──UART──▶ [USB-UART] → [本機 Orin NX]
@@ -10,8 +10,8 @@ xwing_uart_vision.py — 接收對方實驗室 Orin NX 送來的雲台視覺資�
       保證兩邊解碼一致. 對方改協定時, 換掉那支檔案即可.
 
 本模組做的事 (都在背景執行緒, 不會卡 50 Hz 控制迴圈):
-  · 讀 UART、重新同步、驗 CRC、解出 16 個欄位
-  · v7: 自動送校時請求, 算「取像 → 本機收到」的延遲, 並換算成本機時間軸的取像時刻
+  · 讀 UART、重新同步、驗 CRC、解出 16 個欄位 (v8 再加雷射距離, 共 17 個)
+  · v7/v8: 自動送校時請求, 算「取像 → 本機收到」的延遲, 並換算成本機時間軸的取像時刻
   · 依任務狀態送模式鍵給對方雲台 (預設關閉, 見 GIMBAL_MODE_CMD_ENABLED),
     並用回傳的 mode 欄位確認, 沒確認就重送
   · USB 拔插 / 串口錯誤 → 自動重開, 不讓主程式掛掉
@@ -65,7 +65,9 @@ _EXPECTED = None
 def _expected_lengths():
     global _EXPECTED
     if _EXPECTED is None:
-        _EXPECTED = {(6, 0): BASE_SIZE, (7, 0): BASE_SIZE + 12, (7, 2): 28}
+        # v8 (2026/11): v7 + 雷射距離 float (4 B) 接在時間戳後面
+        _EXPECTED = {(6, 0): BASE_SIZE, (7, 0): BASE_SIZE + 12,
+                     (8, 0): BASE_SIZE + 16, (7, 2): 28}
     return _EXPECTED
 
 
@@ -121,7 +123,7 @@ class _TxTap:
 # ══════════════════════════════════════════════════════════════════
 VISION_CSV_FIELDS = [
     'vis_link',          # 1 = 串口開著且近期有有效封包
-    'vis_ver',           # 封包版本 6 / 7
+    'vis_ver',           # 封包版本 6 / 7 / 8
     'vis_rx_age_ms',     # 最新封包是多久前收到的 (本機)
     'vis_result_id', 'vis_new',          # vis_new=1: 這拍拿到新的辨識結果
     'vis_valid',         # 1 = 有目標且數值有限
@@ -131,6 +133,7 @@ VISION_CSV_FIELDS = [
     'vis_det_age_ms', 'vis_angle_age_ms',  # 對方送出時, 辨識 / 角度資料的年齡
     'vis_e2e_ms', 'vis_e2e_err_ms',      # v7: 取像 → 本機收到 (含校時誤差)
     'vis_cap_age_ms',    # v7: 控制這一拍時, 該影像已多舊
+    'vis_laser_m',       # v8: 雲台雷射測距 (m); 量不到 / v6、v7 留空
     'vis_err_u_deg', 'vis_err_v_deg',    # 影像角度誤差 (右 / 下為正)
     'vis_u_ctrl', 'vis_v_ctrl',          # 換算到虛擬 (控制) 相機像素, 可直接跟 virt_bbox_u/v 比
     'gimbal_state', 'gimbal_mode_req', 'gimbal_mode_ok',
@@ -541,14 +544,14 @@ class UartVisionLink:
             self.clock.accept(frame, rx_ns)
             self.stats['clock'] += 1
             return
-        self._clock_enabled = (version == 7)
+        self._clock_enabled = version in (7, 8)
         self.stats['frames'] += 1
         self.last_frame_mono = rx_ns / 1e9
         d = dict(zip((name for name, _ in BASE_FIELDS), values))
         d['ver'] = version
         d['rx_mono'] = rx_ns / 1e9
         d['e2e_ms'] = d['e2e_err_ms'] = d['cap_mono'] = None
-        if version == 7:
+        if version in (7, 8):
             e2e, err, cap_mono = self._latency(frame, rx_ns)
             d['e2e_ms'], d['e2e_err_ms'], d['cap_mono'] = e2e, err, cap_mono
         d['valid'] = all(_finite(d.get(k)) for k in
@@ -568,9 +571,11 @@ class UartVisionLink:
                     tm['pitch_settled'] = d['pitch']
 
     def _latency(self, frame, rx_ns):
-        """v7: (取像→收到 ms, 校時不確定 ms, 取像時刻(本機 monotonic 秒)).
+        """v7/v8: (取像→收到 ms, 校時不確定 ms, 取像時刻(本機 monotonic 秒)).
         與 UARTClock.estimate 同一套算法, 但回傳數值而非文字."""
-        capture, session = struct.unpack('>QI', frame[HEADER_SIZE + BASE_SIZE:-CRC_SIZE])
+        # 時間戳緊接在 BASE 後面 12 B (v8 之後還有 4 B 雷射距離, 不能切到 CRC 前)
+        off = HEADER_SIZE + BASE_SIZE
+        capture, session = struct.unpack('>QI', frame[off:off + 12])
         if not capture:
             return None, None, None
         cands = [s for s in self.clock.samples
@@ -657,6 +662,7 @@ def vision_row(link, pkt, last_result_id, now_mono, ctrl_fx, ctrl_fy,
         vis_e2e_ms=r(pkt['e2e_ms']), vis_e2e_err_ms=r(pkt['e2e_err_ms']),
         vis_cap_age_ms=(r((now_mono - pkt['cap_mono']) * 1000.0, 1)
                         if pkt['cap_mono'] is not None else ''),
+        vis_laser_m=r(pkt.get('laser_distance_m'), 1),
     )
     if pkt['valid']:
         ex, ey = pkt['offset_x'] / pkt['fx'], pkt['offset_y'] / pkt['fy']

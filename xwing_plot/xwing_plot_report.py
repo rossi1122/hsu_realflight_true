@@ -998,8 +998,11 @@ def figP8_gimbal(R, path, title, pdf):
     sp = _dive_span(R)
     x1 = (sp[1] + 2.0) if sp else _guided_end(R)
     w = (t >= 0) & (t <= x1)
-    fig, ax = plt.subplots(3, 1, figsize=(10, 9), layout='constrained',
-                           gridspec_kw=dict(height_ratios=[1.2, 1, .7]))
+    las = L.num('vis_laser_m') if L.has('vis_laser_m') else None
+    has_las = las is not None and np.isfinite(las[w]).any()   # v8 才有雷射距離
+    fig, ax = plt.subplots(4 if has_las else 3, 1, figsize=(10, 11.5 if has_las else 9),
+                           layout='constrained',
+                           gridspec_kw=dict(height_ratios=[1.2, 1, .7, 1] if has_las else [1.2, 1, .7]))
     gp = L.num('vis_gimbal_pitch')
     lock, tol = C('GIMBAL_LOCK_PITCH_DEG'), C('GIMBAL_LOCK_TOL_DEG')
     ax[0].plot(t[w], gp[w], color=C_BLK, lw=1.8, label='gimbal pitch (earth-ref)')
@@ -1025,8 +1028,14 @@ def figP8_gimbal(R, path, title, pdf):
             txt += f'\nlocked +{t[lk[0]] - tr:.2f} s'
         ax[0].text(tr, .95, ' ' + txt, transform=ax[0].get_xaxis_transform(), va='top', fontsize=9,
                    color='#7D3C98', bbox=dict(boxstyle='round', fc='white', ec='#7D3C98'))
-    for a, ttl, yl in ((ax[0], '(a) Gimbal pitch', 'Pitch (deg)'), (ax[1], '(b) Gimbal roll', 'Roll (deg)'),
-                       (ax[2], '(c) Gimbal mode', 'Mode')):
+    panels = [(ax[0], '(a) Gimbal pitch', 'Pitch (deg)'), (ax[1], '(b) Gimbal roll', 'Roll (deg)'),
+              (ax[2], '(c) Gimbal mode', 'Mode')]
+    if has_las:
+        ax[3].plot(t[w], las[w], '.', color=C_BLK, ms=2.5, label='gimbal laser range')
+        ax[3].plot(t[w], L.num('slant_m')[w], '--', color=C_TRK, lw=1.5,
+                   label='slant range to virtual target')
+        panels.append((ax[3], '(d) Laser range (v8)', 'Range (m)'))
+    for a, ttl, yl in panels:
         _bands(a, R, x0=0, x1=x1)
         a.set_xlim(0, x1)
         a.set(xlabel='Time (s) [t = 0 at GUIDED (SEARCH) entry]', ylabel=yl)
@@ -1671,6 +1680,11 @@ def analyse(R, st, events, gps_lines):
             nums.append(f'雲台鎖定 −30° 到位: PRE_DIVE 後 {f1(gl, 2)} s')
             if not np.isfinite(gl):
                 warn('PRE_DIVE 之後雲台一直沒有回報鎖定到位')
+    if L.has('vis_laser_m'):                       # v8 雷射測距 (GUIDED 期間)
+        las = L.num('vis_laser_m')[R.mode != '']
+        if np.isfinite(las).any():
+            nums.append(f'雲台雷射距離: 有值 {100 * np.isfinite(las).mean():.0f} % (GUIDED 期間), '
+                        f'範圍 {np.nanmin(las):.0f} ~ {np.nanmax(las):.0f} m (Fig 8d)')
     for ln in gps_lines or []:
         nums.append('真車 GPS: ' + ln)
     return tl, ev_lines, nums, chk

@@ -80,7 +80,7 @@
 | `xwing_virtual_RUDDER_BENCH.md` | (新) | X-wing 方向舵掛機測試流程 |
 | `xwing_virtual_GIMBAL_UART.md` | (新) | ★ 對方實驗室雲台視覺 UART 整合說明 (接線、協定、模式鍵對應、待確認問題) |
 | `xwing_virtual_GIMBAL_GROUND_TEST.md` | (新) | ★ 雲台鎖定模式地面測試步驟 (桌上自測 → 接線 → 看雲台轉到 −30° → 整機掛機) |
-| `xwing_uart_vision.py` | (新) | 背景執行緒接收雲台視覺 UART (v6/v7)、送模式鍵並確認、判斷鎖定到位；視覺資料只記錄，不進控制 |
+| `xwing_uart_vision.py` | (新) | 背景執行緒接收雲台視覺 UART (v6/v7/v8；v8 含雷射距離 → CSV `vis_laser_m`)、送模式鍵並確認、判斷鎖定到位；視覺資料只記錄，不進控制 |
 | `xwing_uart_sender_sim.py` | (新) | 模擬對方 Orin NX + 雲台 (只有 pitch 軸、追蹤 / 鎖定 −30°)，沒有硬體也能測 |
 | `xwing_gimbal_mode_test.py` | (新) | 雲台模式鍵地面測試工具 (不需 ROS)：量送出 → 確認 → 鎖定到位的時間 |
 | `uart_mipi_receiver.py` | 對方提供 (未修改) | UART 協定定義與獨立接收測試程式 |

@@ -92,7 +92,7 @@ xwing_plot/plot_results/<log 檔名>/run1/
 | Fig 5 PID 重放 | 同一套 PID：虛擬目標 vs 雲台資料的輸入誤差、重算的航向 / pitch 命令（DIVE 有雲台資料才有） | 見第 5.1 節 |
 | Fig 6 空速 | 空速 + 各階段平均線與統計表 | `PULLOUT_VMAX_MPS`、`THR_MIN` |
 | Fig 7 控制迴路誤差 | DIVE 中影像誤差 → 姿態追蹤誤差 | 哪一段迴路跟不上 |
-| Fig 8 雲台姿態 | 雲台 pitch / roll / 模式（有雲台才有） | 有沒有在 PRE_DIVE 鎖到 −30° |
+| Fig 8 雲台姿態 | 雲台 pitch / roll / 模式（有雲台才有）；v8 多一格 (d) 雷射距離 vs 到虛擬目標的斜距 | 有沒有在 PRE_DIVE 鎖到 −30°；雷射有沒有量到 |
 | Fig 9 DIVE 軌跡 | DIVE 飛機與目標俯視軌跡（目標方向 = Y 軸，每秒畫機頭箭頭） | 推頭時側偏、方向舵修正 |
 | **Fig 10~15：X-wing 才有的診斷圖** | | |
 | Fig 10 方向舵 | raw / cmd / sent、±限幅、被空速或 roll 限制的區間、偏航角速度 | `K_LAT_TO_RUDDER`、`RUDDER_LIMIT_DEG`、`RUDDER_SLEW_DPS`、`ROLL_PROT_*` |

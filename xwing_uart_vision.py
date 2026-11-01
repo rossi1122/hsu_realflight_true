@@ -377,8 +377,11 @@ class UartVisionLink:
             elif now - self._rx_down_report_t >= 30.0:
                 self._rx_down_report_t = now
                 ic = _icount(self._ser)
+                sent = st['tx_bytes'] - self._rx_down_tx0
                 msg = (f"[UARTVision] ★ RX 仍斷線 {now - self._rx_down_t:.0f}s; TX 期間送出 "
-                       f"{st['tx_bytes'] - self._rx_down_tx0} bytes (我們這邊有在送)"
+                       f"{sent} bytes "
+                       + ("(★ 串口沒開, 沒有送)" if self._ser is None
+                          else "(我們這邊有在送)" if sent else "(串口開著, 這段沒有要送的)")
                        + (f"; 驅動 rx={ic['rx']} frame={ic['frame']} brk={ic['brk']}" if ic else ''))
                 self._raw_note(msg)
                 self.log(msg)

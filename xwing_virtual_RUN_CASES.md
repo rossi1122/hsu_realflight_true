@@ -101,7 +101,7 @@ python3 xwing_virtual_flight.py --static
 | PRE_DIVE | 到目標水平距 ≤ 415.69 m (= 240/tan30°) | 1.4 s / 43 m |
 | DIVE | pitch 到 −27° 內 | 5.4 s / 187 m，空速 32 → 46 m/s |
 | PULLOUT | AGL ≤ 120 m (預測 0.5 s) 或空速 ≥ 60 m/s | 0.5 s |
-| DONE | TECS 120 m / 30 m/s 平飛往南 | 最低約 100 m 後回 120 m |
+| DONE | TECS 140 m / 30 m/s 平飛往南 | 最低約 115~125 m 後回 140 m |
 
 5. 看到 `MODE: PULLOUT → DONE` 之後，**撥回 AUTO** (飛機會爬回 240 m 回跑道) 或照 SOP 處理。
 
@@ -115,7 +115,7 @@ python3 xwing_virtual_flight.py --static
 
 ```
 [xwing] 移動目標: 起點 (23.7222419, 120.3798848) 方位 180.0° 速度 10.0 m/s ...
-[xwing] 巡航 240 m / 30 m/s, 俯衝 30° → 120 m 拉平, 速度上限 60 m/s
+[xwing] 巡航 240 m / 30 m/s, 俯衝 30° → 140 m 拉平, 速度上限 60 m/s
 [xwing] 推頭門檻: 到目標水平距 ≤ 416 m (純幾何 416 m)
 [Bridge] PTCH_LIM_MIN_DEG=-45° OK (需求 -40°)
 [Bridge] GUIDED_P=... → 43002 航向控制可用 (SEARCH 走 bank turn)

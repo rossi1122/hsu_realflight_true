@@ -4,7 +4,7 @@ xwing_virtual_config.py — xwing_virtual 版全部參數 (純虛擬軌跡, 無�
 ═══════════════════════════════════════════════════════════════════
 任務: AUTO 繞圈對準 → 撥 GUIDED 開始 → SEARCH(朝虛擬目標直飛)
       → PRE_DIVE(推頭到 -30°) → 30° DIVE(虛擬目標投影 PID)
-      → PULLOUT(120 m 拉平) → TECS 120 m 平飛
+      → PULLOUT(140 m 拉平) → TECS 140 m 平飛
 感知: ★ 控制不用相機 / YOLO / DKF. 對方雲台經 UART 只「記錄 + 送模式鍵」, 不進控制.
       目標 = 已知 GPS 起點 + 方位 + 車速 的虛擬軌跡, 每拍用飛機真實狀態
       投影成「虛擬畫面」(u, v) 餵給 DIVE 段 PID (dive_guidance 原封不動).
@@ -13,8 +13,8 @@ xwing_virtual_config.py — xwing_virtual 版全部參數 (純虛擬軌跡, 無�
 與原 config.py 的差異 (★ = 本版改的值, 原值寫在註解):
   CRUISE_AGL_M      120 → 240     巡航 / 進場高度
   DIVE_ANGLE_DEG     25 → 30      俯衝角
-  PULLOUT_AGL_M      70 → 120     俯衝結束 (拉平) 高度
-  TECS_HOLD_ALT_M    70 → 120     拉平後 TECS 保持高度
+  PULLOUT_AGL_M      70 → 140     俯衝結束 (拉平) 高度 (2026/11/01 由 120 改 140)
+  TECS_HOLD_ALT_M    70 → 140     拉平後 TECS 保持高度 (2026/11/01 由 120 改 140)
   V_CRUISE_MPS       20 → 30      巡航空速
   SEARCH_SPEED_MPS   16 → 30      SEARCH 空速 (= AUTO 巡航)
   TECS_SPEED_MPS     18 → 30      拉平後空速
@@ -34,11 +34,13 @@ class XwingVirtualConfig:
     # ════════════════════════════════════════════════════════════
     CRUISE_AGL_M = 240.0        # ★ 巡航/進場高度 (AUTO 繞圈高度)       原 120
     DIVE_ANGLE_DEG = 30.0       # ★ 俯衝角 (正值)                       原 25
-    PULLOUT_AGL_M = 120.0       # ★ 俯衝 240 → 120 m, 到 120 m 拉平      原 70
+    PULLOUT_AGL_M = 140.0       # ★ 俯衝 240 → 140 m, 到 140 m 拉平      原 70
+                                #   (2026/11/01 由 120 改 140: 10/29 實飛 PULLOUT 在 AGL 131~133 m 觸發
+                                #    (提前 0.5 s 預測), 改平時最低掉到 97~105 m, 低於 ABORT 100 m)
     PULLOUT_VMAX_MPS = 60.0     # ★ 速度上限: 空速 ≥ 此值即提前拉平      原 30
                                 #   (安全上限. 正常剖面峰值見 xwing_virtual_sim.py,
                                 #    若 60 是結構極限, 建議改 55 留反應餘裕)
-    TECS_HOLD_ALT_M = 120.0     # ★ 拉平後 TECS 保持高度 (= PULLOUT_AGL)  原 70
+    TECS_HOLD_ALT_M = 140.0     # ★ 拉平後 TECS 保持高度 (= PULLOUT_AGL)  原 70 (11/01 由 120 改 140)
                                 #   (進 PRE_DIVE 時就先送, 讓 TECS 提早收斂)
     TECS_SPEED_MPS = 30.0       # ★ 拉平 / DONE 的 TECS 目標空速          原 18
     SEARCH_SPEED_MPS = 30.0     # ★ SEARCH 巡航空速 (與 AUTO 一致)        原 16
@@ -73,7 +75,7 @@ class XwingVirtualConfig:
     #  安全
     # ════════════════════════════════════════════════════════════
     ABORT_MIN_AGL_M = 100.0     # ★ 低於此高度 ABORT 拉起 (原 55, 拉平高度上移)
-                                #   PULLOUT 120 m 先觸發; 這是最後一道
+                                #   PULLOUT 140 m 先觸發; 這是最後一道
     ABORT_TARGET_LOST_S = 1.5   # 虛擬目標永遠有效, 此值實際不會觸發
 
     # ════════════════════════════════════════════════════════════

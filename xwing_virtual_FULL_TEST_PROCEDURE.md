@@ -339,7 +339,7 @@ python3 xwing_virtual_flight.py --moving --case flight1   # DIVE 一律用方向
 要看到：
 ```
 [xwing] 移動目標: 起點 (23.7222419, 120.3798848) 方位 180.0° 速度 10.0 m/s ...
-[xwing] 巡航 240 m / 30 m/s, 俯衝 30° → 120 m 拉平, 速度上限 60 m/s
+[xwing] 巡航 240 m / 30 m/s, 俯衝 30° → 140 m 拉平, 速度上限 60 m/s
 [xwing] 推頭門檻: 到目標水平距 ≤ 416 m (純幾何 416 m)
 [xwing] 雲台視覺 UART: ... (資料只記錄); 模式鍵 ON
 [UARTVision] 已開啟 ... @ 115200 8N1
@@ -387,7 +387,7 @@ python3 xwing_virtual_flight.py --moving --case flight1   # DIVE 一律用方向
 | 0 s | `★ GUIDED 上升沿 — 種點 + ARM`、`雲台狀態 → SEARCH: 模式鍵 '1'` | 前幾秒機翼保持水平 (韌體內建逾時)，之後朝目標修航向 |
 | 約 10 s | `★★ MODE: SEARCH → PRE_DIVE`、`雲台狀態 → PRE_DIVE: 模式鍵 '2'`、`★ 雲台鎖定到位` | 開始推頭 |
 | 約 11.3 s | `★★ MODE: PRE_DIVE → DIVE` | 30° 俯衝，空速 32 → 46 m/s |
-| 約 16.8 s | `★★ MODE: DIVE → PULLOUT` | 約 120 m 拉平 |
+| 約 16.8 s | `★★ MODE: DIVE → PULLOUT` | 約 140 m 拉平 |
 | 約 17.3 s | `★★ MODE: PULLOUT → DONE` | 平飛往南，最低約 100 m 後回到 120 m |
 
 4. 看到 `MODE: PULLOUT → DONE` 之後，地面站切回 **AUTO**，飛機爬回 240 m、回跑道。

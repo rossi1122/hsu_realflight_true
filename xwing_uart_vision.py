@@ -605,11 +605,18 @@ class UartVisionLink:
             tries, sent_t = self._mode_tries, self._mode_sent_t
         if key is None:
             return
-        if key.isdigit() and rep == int(key):
-            return                                  # 對方已回報同一模式
+        if key.isdigit() and rep == int(key):       # 對方已回報同一模式
+            if tries:
+                # 確認後歸零: 之後對方又被切走, 重新有 mode_max_tries 次機會
+                with self._lock:
+                    if self._mode_req == key:
+                        self._mode_tries = 0
+                        self._mode_warned = False
+            return
         now = time.monotonic()
         if tries >= self.mode_max_tries:
-            if not self._mode_warned:
+            # 最後一次送出後, 等滿 mode_resend_s 還沒確認才警告 (不是一送完就警告)
+            if not self._mode_warned and now - sent_t >= self.mode_resend_s:
                 self._mode_warned = True
                 self.log(f"[UARTVision] ★ 模式鍵 '{key}' 送了 {tries} 次仍未確認 "
                          f"(對方回報 mode={rep})")

@@ -286,11 +286,24 @@ class UartVisionLink:
         with self._lock:
             return dict(self._timing)
 
+    # 對方回報的模式超過這麼久沒更新 → 不算數 (RX 斷了, 那是斷線前的舊值)
+    MODE_FRESH_S = 1.0
+
+    def _reported_mode(self, now=None):
+        """對方「目前」回報的模式; RX 斷線 (最後一筆太舊) → None. 呼叫端須持有 _lock."""
+        d = self._latest
+        if d is None:
+            return None
+        now = time.monotonic() if now is None else now
+        if now - d.get('rx_mono', -1e9) > self.MODE_FRESH_S:
+            return None
+        return d.get('mode')
+
     def mode_status(self):
-        """(要求的鍵, 是否已由對方回報確認)."""
+        """(要求的鍵, 是否已由對方回報確認). RX 斷線時一律算未確認."""
         with self._lock:
             req = self._mode_req
-            rep = self._latest.get('mode') if self._latest else None
+            rep = self._reported_mode()
         return req, (req is not None and req.isdigit() and rep == int(req))
 
     # ------------------------------------------------------------------
@@ -601,7 +614,9 @@ class UartVisionLink:
     def _service_mode_tx(self):
         with self._lock:
             key = self._mode_req
-            rep = self._latest.get('mode') if self._latest else None
+            # ★ 2026/11/02: 只認近期的回報. 10/29 B 機 RX 斷線後還拿斷線前的 mode=1
+            #   當作「已確認」, 第 2 趟 SEARCH 沒送 '1', 雲台一直停在 LOCK.
+            rep = self._reported_mode()
             tries, sent_t = self._mode_tries, self._mode_sent_t
         if key is None:
             return
@@ -641,7 +656,9 @@ def vision_row(link, pkt, last_result_id, now_mono, ctrl_fx, ctrl_fy,
     if link is None:
         return row, last_result_id
     req, ok = link.mode_status()
-    row['gimbal_locked'] = int(link.is_locked(pkt))
+    # 斷線後的舊封包不算鎖定 (跟 vis_link 用同一個 stale_s)
+    _fresh = pkt is not None and (now_mono - pkt['rx_mono']) <= stale_s
+    row['gimbal_locked'] = int(_fresh and link.is_locked(pkt))
     row.update(gimbal_state=gimbal_state,
                gimbal_mode_req=req if req is not None else '',
                gimbal_mode_ok=int(ok),

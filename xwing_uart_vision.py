@@ -71,6 +71,11 @@ def _expected_lengths():
     return _EXPECTED
 
 
+# 對方雷射最短量測距離 (2026/11/02 確認): 5 m 以內量不到, 會送 0 或零星的小值 → 當作沒量到.
+#   原始值仍在 _uart_raw.bin 裡.
+LASER_MIN_M = 5.0
+
+
 def _finite(x):
     return x is not None and isinstance(x, (int, float)) and math.isfinite(x)
 
@@ -133,7 +138,7 @@ VISION_CSV_FIELDS = [
     'vis_det_age_ms', 'vis_angle_age_ms',  # 對方送出時, 辨識 / 角度資料的年齡
     'vis_e2e_ms', 'vis_e2e_err_ms',      # v7: 取像 → 本機收到 (含校時誤差)
     'vis_cap_age_ms',    # v7: 控制這一拍時, 該影像已多舊
-    'vis_laser_m',       # v8: 雲台雷射測距 (m); 量不到 / v6、v7 留空
+    'vis_laser_m',       # v8: 雲台雷射測距 (m); 量不到 (< LASER_MIN_M) / v6、v7 留空
     'vis_err_u_deg', 'vis_err_v_deg',    # 影像角度誤差 (右 / 下為正)
     'vis_u_ctrl', 'vis_v_ctrl',          # 換算到虛擬 (控制) 相機像素, 可直接跟 virt_bbox_u/v 比
     'gimbal_state', 'gimbal_mode_req', 'gimbal_mode_ok',
@@ -665,7 +670,9 @@ def vision_row(link, pkt, last_result_id, now_mono, ctrl_fx, ctrl_fy,
         vis_e2e_ms=r(pkt['e2e_ms']), vis_e2e_err_ms=r(pkt['e2e_err_ms']),
         vis_cap_age_ms=(r((now_mono - pkt['cap_mono']) * 1000.0, 1)
                         if pkt['cap_mono'] is not None else ''),
-        vis_laser_m=r(pkt.get('laser_distance_m'), 1),
+        vis_laser_m=(r(pkt.get('laser_distance_m'), 1)
+                     if _finite(pkt.get('laser_distance_m'))
+                     and pkt['laser_distance_m'] >= LASER_MIN_M else ''),
     )
     if pkt['valid']:
         ex, ey = pkt['offset_x'] / pkt['fx'], pkt['offset_y'] / pkt['fy']

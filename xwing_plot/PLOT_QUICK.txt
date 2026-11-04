@@ -37,6 +37,9 @@ Fig 14 虛擬目標 vs 真車 (車子出發時機)
    python split_csv.py <log 檔名> --zip          → flight_logs\split\<log 名>_part1of3.zip ...
    python split_csv.py <log 檔名> --parts 4 --zip
 
+【車子 BIN 太大傳不上來】 (只抽 GPS, 幾十 MB → 約 0.3 MB)
+   python car_gps_extract.py <車子 BIN 路徑>   → <BIN 名>_gps.json.gz, 傳這個
+
 【飛控 BIN 太大傳不上來】 (只抽出轉彎分析要的部分, 幾百 MB → 1~3 MB)
    python bin_extract.py <飛控 BIN 路徑>   → <BIN 名>_turns.json.gz, 傳這個
 

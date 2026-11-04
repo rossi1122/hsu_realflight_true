@@ -4,13 +4,22 @@ matplotlib.use('Agg'); import matplotlib.pyplot as plt
 from matplotlib import font_manager as fm
 fm.fontManager.addfont('/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc')
 plt.rcParams['font.family'] = 'WenQuanYi Zen Hei'; plt.rcParams['axes.unicode_minus'] = False
-SC = '/tmp/claude-0/-home-user-hsu-realflight-true/b79ff2fa-47de-5b23-89fd-e6ce021b1454/scratchpad/'
-OUT = sys.argv[1]
+import argparse, gzip, json
+ap = argparse.ArgumentParser(description='真車加速統計 + 真實俯衝時 飛機/虛擬目標/真車 對照')
+ap.add_argument('out', help='輸出資料夾')
+ap.add_argument('--car', required=True, help='車子 GPS: car_gps_extract.py 的 _gps.json.gz (或 bin_extract 的 pickle)')
+ap.add_argument('--log', required=True, help='飛行 CSV (xwing_virtual_*.csv)')
+ap.add_argument('--guided', type=float, nargs='+', required=True, help='要對照的趟次: 切 GUIDED 的 log 時間 (s)')
+ap.add_argument('--names', nargs='+', required=True, help='各趟名稱 (與 --guided 對應)')
+ap.add_argument('--plane', default='第一架', help='標題用')
+ap.add_argument('--tag', default='1104', help='輸出檔名後綴')
+args = ap.parse_args()
+OUT = args.out
 SURF, INK, INK2, GRID = '#fcfcfb', '#0b0b0b', '#52514e', '#e4e3df'
-COL = ['#2a78d6', '#eb6834', '#1baf7a', '#8e44ad']
+COL = ['#2a78d6', '#eb6834', '#1baf7a', '#8e44ad', '#008300', '#7f6a00']
 TW = datetime.timezone(datetime.timedelta(hours=8))
 S = (23.7222419, 120.3798848); R = 6378137
-o = pickle.load(open(SC + 'car1104/car.pkl', 'rb'))
+o = (json.load(gzip.open(args.car, 'rt')) if args.car.endswith('.gz') else pickle.load(open(args.car, 'rb')))
 G = [g for g in o['GPS'] if g['Status'] >= 3]
 cu = np.array([315964800 + g['GWk'] * 604800 + g['GMS'] / 1000 - 18 for g in G])
 cn = np.array([math.radians(g['Lat'] - S[0]) * R for g in G])
@@ -19,12 +28,27 @@ def hm(u): return datetime.datetime.fromtimestamp(u, TW).strftime('%H:%M:%S')
 
 # ── 車子 4 趟: 出發時刻 (速度 > 0.5 連續) ──
 deps = []
-for lab, hhmmss in (('第 1 趟 (配合第一架 run 2)', '11:25:50'), ('第 2 趟', '11:31:40'), ('第 3 趟', '11:34:55'), ('第 4 趟', '11:37:30')):
-    t0 = datetime.datetime.strptime('2026-11-04 ' + hhmmss, '%Y-%m-%d %H:%M:%S').replace(tzinfo=TW).timestamp()
-    idx = np.where(cu >= t0)[0]
-    for i in idx:
-        if np.all(cs[i:i + 5] > 0.5):
-            deps.append((lab, i)); break
+i, nG = 0, len(cs)
+while i < nG:
+    if cs[i] > 1.0:
+        j = i
+        while j < nG and cs[j] > 1.0: j += 1
+        if cn[i] - cn[j - 1] > 100:                  # 往南開超過 100 m = 一趟
+            k = i
+            while k > 0 and cs[k - 1] > 0.5 and cu[i] - cu[k - 1] < 15: k -= 1
+            deps.append(k)
+        i = j
+    i += 1
+# 標出跟切 GUIDED 對上的那幾趟 (出發在切 GUIDED 前 40 s ~ 後 10 s)
+_L0 = list(csv.DictReader(open(args.log, encoding='utf-8-sig')))
+_t = np.array([float(r['t']) for r in _L0]); _u = np.array([float(r['gps_unix']) if r['gps_unix'] else np.nan for r in _L0])
+_ok = np.isfinite(_u); _A = np.polyfit(_t[_ok], _u[_ok], 1)
+GU = [np.polyval(_A, g) for g in args.guided]
+_lab = []
+for n_, i in enumerate(deps):
+    m = [nm for nm, ug in zip(args.names, GU) if -40 <= ug - cu[i] <= 10]
+    _lab.append((f'第 {n_ + 1} 趟' + (f' (配合{args.plane} {m[0]})' if m else ''), i))
+deps = _lab
 runs = []
 for lab, i in deps:
     k = (cu >= cu[i]) & (cu <= cu[i] + 40)
@@ -79,12 +103,12 @@ for (ri, ci), cell in tb.get_celld().items():
     if ri == 0: cell.set_text_props(color=INK2, weight='bold'); cell.set_height(cell.get_height() * 1.5)
     elif ci == 0: cell.get_text().set_color(COL[ri - 1])
 at.set_title('各趟統計 (車子 BIN, 5 Hz GPS)', loc='left', color=INK, fontsize=12)
-fig.suptitle('11/04 真車加速統計 (車子 GPS 記錄 11:24~11:43)', x=0.06, ha='left', fontsize=15, color=INK, y=0.985)
-fig.text(0.06, 0.955, '起點 = 虛擬軌跡起點 (23.7222419, 120.3798848); 4 趟都在起點正北方出發往南開 (東西偏差 < 3 m)', fontsize=10.5, color=INK2)
-fig.savefig(OUT + '/car_accel_stats_1104.png', dpi=120, facecolor=SURF, bbox_inches='tight')
+fig.suptitle(f'11/04 真車加速統計 ({args.plane}; 車子 GPS 記錄 {hm(cu[0])[:5]}~{hm(cu[-1])[:5]})', x=0.06, ha='left', fontsize=15, color=INK, y=0.985)
+fig.text(0.06, 0.955, f'起點 = 虛擬軌跡起點 (23.7222419, 120.3798848); {len(runs)} 趟都在起點正北方出發往南開', fontsize=10.5, color=INK2)
+fig.savefig(OUT + f'/car_accel_stats_{args.tag}.png', dpi=120, facecolor=SURF, bbox_inches='tight')
 
 # ═════ 圖 2: 真實俯衝時 飛機 / 虛擬目標 / 真車 ═════
-L = list(csv.DictReader(open(SC + 'f1104a/x/1_test/xwing_virtual_19700103_041747_moving_A_yawpid.csv', encoding='utf-8-sig')))
+L = _L0
 def fl(x):
     try: return float(x)
     except: return float('nan')
@@ -92,8 +116,8 @@ lt = np.array([fl(r['t']) for r in L]); lu = np.array([fl(r['gps_unix']) for r i
 ok = np.isfinite(lu)
 # log t → GPS 時間 (線性回歸, 避開 gps_unix 的取樣跳動)
 A = np.polyfit(lt[ok], lu[ok], 1)
-fig2, axs = plt.subplots(2, 2, figsize=(15, 10.5), facecolor=SURF, gridspec_kw=dict(hspace=0.45, wspace=0.2, width_ratios=[1.35, 1]))
-for row, (name, tg) in enumerate((('第一架 run 2', 1162.93), ('第一架 run 3', 1358.55))):
+fig2, axs = plt.subplots(len(args.guided), 2, figsize=(15, 10.5), facecolor=SURF, gridspec_kw=dict(hspace=0.45, wspace=0.2, width_ratios=[1.35, 1]))
+for row, (name, tg) in enumerate(zip([f'{args.plane} {n}' for n in args.names], args.guided)):
     ax, bx = axs[row]
     style(ax); style(bx)
     k = (lt >= tg - 20) & (lt <= tg + 22)
@@ -116,7 +140,7 @@ for row, (name, tg) in enumerate((('第一架 run 2', 1162.93), ('第一架 run 
     ax.axvline(0, color=INK2, lw=1, ls=':'); ax.text(0.3, 680, '切 GUIDED', color=INK2, fontsize=9)
     ax.set_xlim(-20, 22); ax.set_ylim(-260, 760)
     ax.set_xlabel(f'切 GUIDED 後時間 (s)   [t = 0 = {hm(ug)}]', color=INK2); ax.set_ylabel('在起點北方 (m)', color=INK2)
-    ax.set_title(f'({"ab"[row]}) {name}: 位置對時間', loc='left', color=INK, fontsize=13)
+    ax.set_title(f'({"aceg"[row]}) {name}: 位置對時間', loc='left', color=INK, fontsize=13)
     ax.legend(frameon=False, fontsize=9.5, loc='lower left')
     # 差距
     cn_i = np.interp(tt, ct, cnn, left=np.nan, right=np.nan)
@@ -127,11 +151,10 @@ for row, (name, tg) in enumerate((('第一架 run 2', 1162.93), ('第一架 run 
         idx = [i for i, x in enumerate(mode) if x == m]
         if idx:
             i0 = idx[0]; bx.plot([tt[i0]], [gap[i0]], 'o', color=INK, ms=6)
-            bx.annotate(f'{m} {gap[i0]:.0f} m', (tt[i0], gap[i0]), xytext=(6, -14), textcoords='offset points', fontsize=9.5, color=INK)
+            bx.annotate(f'{m} {gap[i0]:.0f} m', (tt[i0], gap[i0]), xytext=(-100, 6) if m == 'PRE_DIVE' else (6, -14), textcoords='offset points', fontsize=9.5, color=INK)
     bx.set_xlim(-1, 22); bx.set_ylim(-20, 260)
     bx.set_xlabel('切 GUIDED 後時間 (s)', color=INK2); bx.set_ylabel('真車 - 虛擬目標 (m, + = 車子落後)', color=INK2)
-    bx.set_title(f'({"cd"[row]}) {name}: 真車落後虛擬目標多少', loc='left', color=INK, fontsize=13)
-fig2.suptitle('11/04 第一架兩趟真實俯衝: 飛機 / 虛擬目標 / 真車 (GPS 時間對齊)', x=0.06, ha='left', fontsize=15, color=INK, y=0.99)
-fig2.text(0.06, 0.955, 'run 2: 車子在切 GUIDED 前 6.6 s 才慢慢出發 (最高約 4.5 m/s);  run 3: 車子停在起點北方約 41 m 沒有開', fontsize=10.5, color=INK2)
-fig2.savefig(OUT + '/dive_car_vs_virtual_1104.png', dpi=120, facecolor=SURF, bbox_inches='tight')
+    bx.set_title(f'({"bdfh"[row]}) {name}: 真車落後虛擬目標多少', loc='left', color=INK, fontsize=13)
+fig2.suptitle(f'11/04 {args.plane}真實俯衝: 飛機 / 虛擬目標 / 真車 (GPS 時間對齊)', x=0.06, ha='left', fontsize=15, color=INK, y=0.99)
+fig2.savefig(OUT + f'/dive_car_vs_virtual_{args.tag}.png', dpi=120, facecolor=SURF, bbox_inches='tight')
 for r in runs: print(r['lab'], round(r['n0'], 1), r['tx'], r['vx'], r['vmax'])

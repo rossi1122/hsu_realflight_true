@@ -11,11 +11,24 @@
 雲台: 兩架每趟 GUIDED 都 100% 連線, TRACK / LOCK 都在 0.3 s 內確認, 鎖到 -28~-30° 約 0.8~1.4 s; 偵測率 0%.
 第二架: 彈射與落地瞬間我們這端 USB-UART 斷開 1 s (自動重開); 空中 12:53 對方程式重啟 (39 s).
 
-## 真車 (車子 BIN 11:24~11:43, 只涵蓋第一架)
+## 真車: 第一架 (車子 BIN 11:24~11:43)
 ![加速統計](car_accel_stats_1104.png)
 ![俯衝對照](dive_car_vs_virtual_1104.png)
 
 - 車子加速很慢: 0~15 s 只有 3~6 m/s, 約 18~24 s 才到 8.5~9.6 m/s; 全力開時 15 / 18 / 22 s 已開 46~64 / 64~83 / 89~116 m.
 - 第一架 run 2: 車子在切 GUIDED 前 6.6 s 才出發, 且開很慢 (最高約 4.5 m/s), 推頭時落後虛擬目標 119 m, DIVE 開始 135 m.
 - 第一架 run 3: 車子停在起點北方約 41 m 沒有開, 推頭時落後 153 m.
-- 圖用 `car_vs_virtual.py` 產生 (讀 scratchpad 的車子 BIN 與飛行 CSV).
+
+## 真車: 第二架 (車子 GPS 12:44~13:10, car_gps_extract.py 抽出)
+![加速統計 B](car_accel_stats_1104_B.png)
+![俯衝對照 B](dive_car_vs_virtual_1104_B.png)
+
+- 5 趟都在起點北方 36~53 m 出發; 經過起點花 12~18 s, 時速只有 4.1~5.5 m/s; 15 s 內只有 3~5.7 m/s.
+- 第二架 run 1: 車子在切 GUIDED 前 2 s 出發, 推頭時落後 124 m, DIVE 開始 130 m.
+- 第二架 run 2: 車子在切 GUIDED 前 5 s 出發, 推頭時落後 96 m, DIVE 開始 111 m.
+
+## 重畫
+```
+python3 car_vs_virtual.py <輸出資料夾> --car <車子 _gps.json.gz> --log <飛行 CSV> \
+        --guided <切 GUIDED log 時間 ...> --names "run 1" "run 2" --plane 第二架 --tag 1104_B
+```

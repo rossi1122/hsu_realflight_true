@@ -32,3 +32,19 @@
 python3 car_vs_virtual.py <輸出資料夾> --car <車子 _gps.json.gz> --log <飛行 CSV> \
         --guided <切 GUIDED log 時間 ...> --names "run 1" "run 2" --plane 第二架 --tag 1104_B
 ```
+
+## 第一架 轉彎分析 (飛控 00000002.BIN)
+![轉彎軌跡](turn_wp2_1104_A_trajectory.png)
+![轉彎統計](turn_wp2_1104_A_stats.png)
+
+| 圈 | 機翼拉平 (s / m) | 對正+拉平 (s / m) | 備註 |
+|---|---|---|---|
+| 1 | 8.0 / 181 | 13.4 / 363 | |
+| 2 | 7.3 / 158 | 8.5 / 194 | 13.5 s 切 GUIDED (run 2) |
+| 3 | 7.3 / 151 | 7.3 / 151 | |
+| 4 | 8.1 / 180 | — | 11.6 s 切 GUIDED (run 3), 切時還沒對正 |
+| 平均 | 7.7 / 167 (n=4) | 9.7 / 236 (n=3) | 10/29 A 機: 10.1 / 269, 12.9 / 366 |
+
+- WP2 西方 150 m → Reached WP2 約 0.6 s; → 經過 WP3 15.1~15.5 s; → 切 GUIDED 14.1 s (run 2) / 12.1 s (run 3).
+- 飛控上的任務跟規劃圖不同: WP1 / WP5 位置不同、沒有 WP6、DO_JUMP 重複 10 次、有降落航點 (WP2~WP4 相同).
+- 圖用 `turn_plot.py` 產生: `python3 turn_plot.py turn_wp2_1104_A.png <bin_extract 的 _turns.json.gz>`.

@@ -1009,6 +1009,10 @@ def figP8_gimbal(R, path, title, pdf):
     ax[0].axhspan(lock - tol, lock + tol, color='#7D3C98', alpha=.10)
     ax[0].axhline(lock, color='#7D3C98', ls='--', lw=1.2, label=f'lock {lock:g}° ± {tol:g}°')
     ax[1].plot(t[w], L.num('vis_gimbal_roll')[w], color=C_BLK, lw=1.8, label='gimbal roll')
+    gy = L.num('vis_gimbal_yaw') if L.has('vis_gimbal_yaw') else None
+    has_yaw = gy is not None and np.isfinite(gy[w]).any()   # 新格式 V0 系列才有 yaw
+    if has_yaw:
+        ax[1].plot(t[w], gy[w], '--', color=C_TRK, lw=1.5, label='gimbal yaw (rel. body)')
     ax[2].plot(t[w], L.num('vis_gimbal_mode')[w], color=C_BLK, lw=1.8, drawstyle='steps-post',
                label='reported')
     ax[2].plot(t[w], L.num('gimbal_mode_req')[w], '--', color=C_TRK, lw=1.5, drawstyle='steps-post',
@@ -1028,13 +1032,15 @@ def figP8_gimbal(R, path, title, pdf):
             txt += f'\nlocked +{t[lk[0]] - tr:.2f} s'
         ax[0].text(tr, .95, ' ' + txt, transform=ax[0].get_xaxis_transform(), va='top', fontsize=9,
                    color='#7D3C98', bbox=dict(boxstyle='round', fc='white', ec='#7D3C98'))
-    panels = [(ax[0], '(a) Gimbal pitch', 'Pitch (deg)'), (ax[1], '(b) Gimbal roll', 'Roll (deg)'),
+    panels = [(ax[0], '(a) Gimbal pitch', 'Pitch (deg)'),
+              (ax[1], '(b) Gimbal roll / yaw' if has_yaw else '(b) Gimbal roll',
+               'Angle (deg)' if has_yaw else 'Roll (deg)'),
               (ax[2], '(c) Gimbal mode', 'Mode')]
     if has_las:
         ax[3].plot(t[w], las[w], '.', color=C_BLK, ms=2.5, label='gimbal laser range')
         ax[3].plot(t[w], L.num('slant_m')[w], '--', color=C_TRK, lw=1.5,
                    label='slant range to virtual target')
-        panels.append((ax[3], '(d) Laser range (v8)', 'Range (m)'))
+        panels.append((ax[3], '(d) Laser range', 'Range (m)'))
     for a, ttl, yl in panels:
         _bands(a, R, x0=0, x1=x1)
         a.set_xlim(0, x1)

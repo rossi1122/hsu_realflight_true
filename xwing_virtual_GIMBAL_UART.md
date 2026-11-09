@@ -1,7 +1,7 @@
 # 雲台視覺 UART 整合說明 (xwing_virtual)
 
 > 對象：本實驗室 (飛控 / 任務程式) 與 對方實驗室 (雲台相機 + 辨識 Orin NX)。
-> 協定來源：對方提供的 `uart_mipi_receiver.py` (UART v6 / v7，big-endian，CRC-16/CCITT-FALSE)。
+> 協定來源：對方提供的 `uart_mipi_receiver.py`「共用雲台接收端 V6」(2026/11 起；新格式 V0 系列 version 0~5、10，舊格式 v6 / v7 / v8 仍可讀；big-endian，CRC-16/CCITT-FALSE)。
 >
 > **目前狀態：**
 > - 視覺資料**只接收、記錄，不進飛機控制**。控制仍用 GPS 虛擬目標，視覺資料先拿來比對與驗證。
@@ -18,11 +18,11 @@
 │  [雲台相機] ─MIPI─▶ [Orin NX (對方)]        │  UART  │  [USB-UART 模組] ─USB─▶ [Orin NX (本機)]  │
 │                     · 目標辨識              │ ─────▶ │                         · xwing_virtual_   │
 │                     · 雲台控制 (追蹤/鎖定)  │ 115200 │                           flight.py        │
-│                     · 打包 v7 遙測 (~83 B)  │ ◀───── │                         · MAVROS ──▶ 飛控 │
+│                     · 打包 V0 遙測 (91 B)   │ ◀───── │                         · MAVROS ──▶ 飛控 │
 │                                            │        │                                           │
 └────────────────────────────────────────────┘        └───────────────────────────────────────────┘
-       對方 → 本機：目標像素、偏移、內參、雲台 pitch/roll、模式、時間戳 (v7)
-       本機 → 對方：模式鍵 '0'/'1'/'2' (ASCII 1 byte)、v7 校時請求
+       對方 → 本機：目標像素、偏移、內參、雲台 pitch/roll/yaw、模式、時間戳、雷射距離
+       本機 → 對方：模式鍵 '0'/'1'/'2' (ASCII 1 byte)、校時請求
 ```
 
 ---
@@ -79,14 +79,27 @@ python3 uart_mipi_receiver.py --port /dev/ttyUSB0
 | 2–3 | offset_x, offset_y | px | 目標相對光學中心的偏移，**右 / 下為正** |
 | 4–7 | fx, fy, cx, cy | px | 相機內參 (隨變焦改變，每筆都送) |
 | 8–9 | image_width, image_height | px | 影像大小 |
-| 10–11 | pitch, roll | deg | 雲台角度 (⚠ **沒有 yaw**) |
+| 10–11 | pitch, roll | deg | 雲台角度 |
 | 12 | mode | — | 0 手動、1 追蹤、2 鎖定 |
 | 13 | result_id | — | 辨識結果編號 (換新結果才會變) |
 | 14–15 | detection_age_ms, angle_age_ms | ms | 送出時辨識結果 / 角度資料的年齡 |
-| v7 | capture_ns, session | — | 取像時間戳 (對方時鐘) + 校時 session |
+| 時間戳 | capture_ns, session | — | 取像時間戳 (對方時鐘) + 校時 session (V0 系列、v7、v8) |
+| 雷射 | laser_distance_m | m | 雲台雷射測距 (V0 系列、v8)；5 m 內量不到 → CSV 留空 |
+| yaw | yaw | deg | ★ 雲台 yaw (**只有 V0 系列**，2026/11 新增) |
 
-- v7 封包 83 bytes，115200 鮑率下線上傳輸約 7.2 ms。30 Hz 時約佔頻寬 22%，足夠。
-- 本機用 v7 校時把「取像時刻」換到本機時間軸，可量出 **取像 → 本機收到** 的延遲 (`vis_e2e_ms`)。
+**封包版本 (接收端都能讀，本機自動辨識)：**
+
+| 版本 | 資料區 | 整包 | 內容 | 校時封包的 version |
+|---|---|---|---|---|
+| **V0 系列 (0~5、10)** | 81 B | 91 B | 基本 16 欄 + 時間戳 + 雷射 + **yaw** | **跟資料封包相同** |
+| v8 (舊) | 77 B | 87 B | 基本 16 欄 + 時間戳 + 雷射 | 7 |
+| v7 (舊) | 73 B | 83 B | 基本 16 欄 + 時間戳 | 7 |
+| v6 (舊) | 61 B | 71 B | 基本 16 欄 | 不校時 |
+
+- V0 封包 91 bytes，115200 鮑率下線上傳輸約 7.9 ms。30 Hz 時約佔頻寬 24%，足夠。
+- 本機用校時把「取像時刻」換到本機時間軸，可量出 **取像 → 本機收到** 的延遲 (`vis_e2e_ms`)。
+- ★ 新格式的校時請求 / 回覆，version 要跟對方資料封包的 version 一樣 (對方接收端 `UARTClock.protocol_version`)。
+  本機看到第一筆資料封包後自動跟著改，不用設定。
 
 ---
 
@@ -206,9 +219,9 @@ CRC-16/CCITT-FALSE)，新增 **flags = 3**：
 
 | 檔案 | 狀態 | 內容 |
 |---|---|---|
-| `uart_mipi_receiver.py` | **新增 (對方提供，未修改)** | 協定定義 + 對方的獨立接收測試程式。本專案直接 import 它的解碼與校時，對方改協定時換掉這支即可 |
-| `xwing_uart_vision.py` | **新增** | 背景執行緒收 UART：重新同步、CRC、解碼、v7 校時與延遲、送模式鍵並確認、USB 拔插自動重開 |
-| `xwing_uart_sender_sim.py` | **新增** | 模擬對方 Orin NX + 雲台 (v7 遙測 + 校時回覆 + 模式鍵；只有 pitch 軸：追蹤時目標置中、鎖定時以 `--slew-dps` 轉到 −30°)。對方硬體到之前就能測 |
+| `uart_mipi_receiver.py` | **對方提供，未修改** (2026/11 換成「共用雲台接收端 V6」) | 協定定義 + 對方的獨立接收測試程式。本專案直接 import 它的解碼與校時；對方改協定時換掉這支，再對照 `xwing_uart_vision.py` 的 `NEW_VERSIONS` / `_expected_lengths` |
+| `xwing_uart_vision.py` | **新增** | 背景執行緒收 UART：重新同步、CRC、解碼 (V0 系列 / v6 / v7 / v8)、校時與延遲、送模式鍵並確認、USB 拔插自動重開 |
+| `xwing_uart_sender_sim.py` | **新增** | 模擬對方 Orin NX + 雲台 (預設 V0 遙測 `--version 0`，可選 1~5、10 或舊版 7 / 8；校時回覆 + 模式鍵；只有 pitch 軸：追蹤時目標置中、鎖定時以 `--slew-dps` 轉到 −30°)。對方硬體到之前就能測 |
 | `xwing_gimbal_mode_test.py` | **新增** | ★ 地面測試工具 (不需 ROS / 飛控)：模擬任務狀態切換，量「送出 → 對方確認 → 鎖定到位」的時間，寫 CSV、印通過 / 不通過 |
 | `xwing_virtual_GIMBAL_GROUND_TEST.md` | **新增** | 地面測試詳細步驟 |
 | `xwing_virtual_config.py` | 修改 | `VISION_UART_*`、`GIMBAL_MODE_*`、`GIMBAL_LOCK_*` 參數；**預設開啟**；PRE_DIVE / DIVE 對應 `'2'` 鎖定 |
@@ -294,16 +307,18 @@ python3 xwing_virtual_flight.py --moving --no-vision
 | 欄位 | 說明 |
 |---|---|
 | `vis_link` | 1 = 串口開著且 2 s 內有有效封包 |
-| `vis_ver` | 封包版本 6 / 7 |
+| `vis_ver` | 封包版本：新格式 0~5、10；舊格式 6 / 7 / 8 |
 | `vis_rx_age_ms` | 最新封包是多久前收到的 |
 | `vis_result_id`、`vis_new` | 辨識結果編號；`vis_new=1` 表示這拍拿到新結果 (50 Hz 控制比 ~30 Hz 遙測快，會重複) |
 | `vis_valid` | 1 = 有目標且數值有效 |
 | `vis_tgt_cx/cy`、`vis_off_x/y` | 對方原始像素值 |
 | `vis_fx/fy/cx/cy`、`vis_img_w/h` | 對方送來的內參 |
 | `vis_gimbal_pitch/roll`、`vis_gimbal_mode` | 雲台角度、對方回報的模式 |
+| `vis_gimbal_yaw` | 雲台 yaw (度)；只有新格式 V0 系列有，舊版留空 |
 | `vis_det_age_ms`、`vis_angle_age_ms` | 對方送出時資料的年齡 |
-| `vis_e2e_ms`、`vis_e2e_err_ms` | v7：取像 → 本機收到的延遲與校時誤差 |
-| `vis_cap_age_ms` | v7：控制這一拍時，影像已經多舊 |
+| `vis_e2e_ms`、`vis_e2e_err_ms` | 有時間戳的版本：取像 → 本機收到的延遲與校時誤差 |
+| `vis_cap_age_ms` | 有時間戳的版本：控制這一拍時，影像已經多舊 |
+| `vis_laser_m` | 雲台雷射測距 (m)；V0 系列 / v8 才有，5 m 內量不到留空 |
 | `vis_err_u_deg`、`vis_err_v_deg` | 影像角度誤差 atan(offset / f)，右 / 下為正 |
 | `vis_u_ctrl`、`vis_v_ctrl` | 換算到虛擬相機像素，**可直接跟 `virt_bbox_u/v` 比**，看真實影像與虛擬目標差多少 |
 | `gimbal_state` | 給雲台的任務狀態 (STANDBY / SEARCH / PRE_DIVE / DIVE …) |

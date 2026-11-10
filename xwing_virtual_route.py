@@ -264,7 +264,7 @@ def plot(path, res, wps, key_pts, road_end_ne, alt):
                  f"{ph}\n{r['horiz_m']:.0f} m / {r['dur']:.1f} s",
                  ha='center', fontsize=8, color=PHASE_COLOR[ph])
         y_lab += 0 if ph == 'SEARCH' else 22
-    axp.set_xlabel('沿進場方向距離 (m), 0 = 目標起點, + = 目標前進方向 (往南)')
+    axp.set_xlabel(f'沿進場方向距離 (m), 0 = 目標起點, + = 目標前進方向 (方位 {res["heading"]:.0f}°)')
     axp.set_ylabel('高度 AGL (m)')
     axp.set_ylim(-10, cfg.CRUISE_AGL_M + 80)
     axp.grid(alpha=0.3)
@@ -313,7 +313,7 @@ def main():
     heading = res['heading']
     origin = res['origin']
 
-    # 右手方向的東分量 = cos(heading). 往南飛 → 右手朝西.
+    # 右手方向的東分量 = cos(heading). 往南飛 → 右手朝西; 往北飛 → 右手朝東.
     h = math.radians(heading)
     side = 'right' if ((math.cos(h) > 0) == (args.side == 'east')) else 'left'
 

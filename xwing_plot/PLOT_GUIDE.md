@@ -163,7 +163,8 @@ xwing_plot/plot_results/<log 檔名>/run1/
   - BIN 沒有涵蓋 PRE_DIVE~DIVE 的時間（拿錯天、車子飛控沒錄到）；
   - 資料夾裡有兩個 BIN 都涵蓋（只留當天那個）；
   - 這趟沒有進 DIVE。
-- **Fig 14 的「北向差」**：目標往南開，北向差為正 = 車子在虛擬目標**後面**（車子出發晚了）。
+- **Fig 14 的前後差**：`summary.txt` 寫「沿目標方位的前後差」，**負 = 車子在虛擬目標後面**（車子出發晚了），往南 / 往北開都一樣。
+  圖上和 `_aligned.csv` 的 `err_n` / `err_e` 仍是北 / 東向差。
 - **只想單獨比對真車**：
   ```bash
   python3 xwing_plot_target_gps.py ../flight_logs/<log>.csv      (BIN 放 car_bin/)

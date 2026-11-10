@@ -45,8 +45,16 @@ R = 6378137.0
 def ne2gps(n, e):
     return (S0[0] + math.degrees(n / R),
             S0[1] + math.degrees(e / (R * math.cos(math.radians(S0[0])))))
+from xwing_virtual_common import target_heading_deg
+HDG = target_heading_deg(cfg, S0)       # 目標前進方位 (跟著 config, 往南 180 / 往北 0 都能跑)
+def ax_ne(s, x):
+    """沿目標方位 s 公尺 (+ = 前進方向), 右側 x 公尺 → (n, e)."""
+    h = math.radians(HDG)
+    return s * math.cos(h) - x * math.sin(h), s * math.sin(h) + x * math.cos(h)
 random.seed(1)
-AC = {'n': 650.0, 'e': 25.0, 'h': 238.0, 'V': 30.0, 'pitch': 0.0, 'chi': 183.0, 'roll': 0.0, 'r': 0.0}
+_n0, _e0 = ax_ne(-650.0, -25.0)          # 目標起點後方 650 m, 航線左側 25 m
+AC = {'n': _n0, 'e': _e0, 'h': 238.0, 'V': 30.0, 'pitch': 0.0, 'chi': (HDG + 3.0) % 360,
+      'roll': 0.0, 'r': 0.0}
 BR = {'out': None}
 SCRIPT = [(2.0, True)] + ([(40.0, False), (60.0, True)] if TWO else [])
 T0 = CLK['t']
@@ -84,7 +92,8 @@ def step():
     AC['e'] += v * math.cos(math.radians(AC['pitch'])) * math.sin(math.radians(AC['chi'])) * DT
     if CLK['t'] - T0 > (100 if TWO else 45): STOP['v'] = True
     if TWO and abs(CLK['t'] - T0 - 59.0) < DT / 2:
-        AC.update({'n': 640.0, 'e': -20.0, 'h': 241.0, 'V': 30.0, 'pitch': 0.0, 'chi': 178.0})
+        _n, _e = ax_ne(-640.0, 20.0)
+        AC.update({'n': _n, 'e': _e, 'h': 241.0, 'V': 30.0, 'pitch': 0.0, 'chi': (HDG - 2.0) % 360})
 
 class FakeIO:
     def __init__(self): pass
@@ -139,7 +148,7 @@ CAR_LEAD = -4.0
 def car_ne(t_rel):
     tm = t_rel - 2.0 + CAR_LEAD          # 相對第 1 次撥 GUIDED
     dist = 0 if tm < 0 else (5 / 7.0 * tm * tm if tm < 7 else 35 + 10 * (tm - 7))
-    return 10 - dist, 1.5
+    return ax_ne(dist - 10.0, -1.5)      # 起點後方 10 m 出發, 沿目標方位開
 
 
 # ── 假雲台 (對方 Orin NX): pitch/roll 相對地面, yaw 跟機頭; '1' 追蹤車子, '2' 鎖 -30° ──
@@ -221,7 +230,7 @@ for p in (f, c):
     shutil.move(p, os.path.join(OUT, os.path.basename(p)))
 print('log ->', os.path.join(OUT, os.path.basename(c)))
 
-# ── 假車子 BIN: 從起點北方 10 m 出發往南 ~10 m/s, GPS 5 Hz ──
+# ── 假車子 BIN: 從起點後方 10 m 出發, 沿目標方位 ~10 m/s, GPS 5 Hz ──
 def fmt_msg(typ, name, fmt, cols):
     length = 3 + struct.calcsize('<' + ''.join({'Q':'Q','B':'B','I':'I','H':'H','L':'i','f':'f'}[x] for x in fmt))
     return b'\xa3\x95\x80' + struct.pack('<BB4s16s64s', typ, length, name.encode(), fmt.encode(), cols.encode())

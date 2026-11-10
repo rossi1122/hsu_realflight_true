@@ -44,8 +44,11 @@ def ne2gps(n, e):
     return (S0[0] + math.degrees(n / R),
             S0[1] + math.degrees(e / (R * math.cos(math.radians(S0[0])))))
 
-# ── 飛機: 往南 30 m/s, 高度跟 pitch 命令 (GUIDED 時), 非 GUIDED 時 FC 爬回 240 ──
-AC = {'n': 613.0, 'e': 0.0, 'h': 240.0, 'V': 30.0, 'pitch': 0.0}
+# ── 飛機: 沿目標方位 30 m/s (從起點後方 613 m), 高度跟 pitch 命令 (GUIDED 時), 非 GUIDED 時 FC 爬回 240 ──
+from xwing_virtual_common import target_heading_deg
+HDG = target_heading_deg(cfg, S0)
+_HC, _HS = math.cos(math.radians(HDG)), math.sin(math.radians(HDG))
+AC = {'s': -613.0, 'h': 240.0, 'V': 30.0, 'pitch': 0.0}   # s = 沿目標方位距離 (+ = 前進方向)
 BR = {'out': None, 'guided': False}
 SCRIPT = []   # (t_rel, guided)
 T0 = CLK['t']
@@ -66,19 +69,20 @@ def step():
     elif not (g and out and out['mode'] in ('PRE_DIVE',)): AC['V'] += (30 - AC['V']) * 0.02
     v = AC['V']
     AC['h'] += v * math.sin(math.radians(AC['pitch'])) * DT
-    AC['n'] -= v * math.cos(math.radians(AC['pitch'])) * DT
+    AC['s'] += v * math.cos(math.radians(AC['pitch'])) * DT
     if CLK['t'] - T0 > 80: STOP['v'] = True
 
 class FakeIO:
     def __init__(self): pass
     def snapshot(self):
-        lat, lon = ne2gps(AC['n'], AC['e'])
+        lat, lon = ne2gps(AC['s'] * _HC, AC['s'] * _HS)
         g = guided_now()
-        vn = -AC['V'] * math.cos(math.radians(AC['pitch']))
+        vh = AC['V'] * math.cos(math.radians(AC['pitch']))
+        vn, ve = vh * _HC, vh * _HS
         vd = -AC['V'] * math.sin(math.radians(AC['pitch']))
         return {'guided': g, 'lat': lat, 'lon': lon, 'rel_alt': AC['h'],
-                'compass_hdg': 180.0, 'pitch_deg': AC['pitch'], 'roll_deg': 0.0,
-                'airspeed': AC['V'], 'vn': vn, 've': 0.0, 'vd': vd,
+                'compass_hdg': HDG, 'pitch_deg': AC['pitch'], 'roll_deg': 0.0,
+                'airspeed': AC['V'], 'vn': vn, 've': ve, 'vd': vd,
                 'yaw_rate_dps': 0.0, 'gps_unix': None, 'p_dps': 0, 'q_dps': 0,
                 'r_dps': 0, 'nz_g': 1, 'fc_pitch_tgt_deg': None,
                 'fc_nav_pitch_deg': None, 'fc_nav_roll_deg': None,
@@ -98,7 +102,7 @@ F.check_airspeed_params = lambda cfg: None
 FLAGS = {}
 F.keyboard_thread = lambda flags: FLAGS.update(ref=flags)
 
-# 腳本: t=1 GUIDED; DIVE 中 (t≈14) 切出 2 s; 然後把飛機搬回 WP3 北方 613 m @240 m (模擬繞一圈) 再切 GUIDED
+# 腳本: t=1 GUIDED; DIVE 中 (t≈14) 切出 2 s; 然後把飛機搬回目標起點後方 613 m @240 m (模擬繞一圈) 再切 GUIDED
 SCRIPT += [(2.0, True), (15.0, False), (21.0, True), (26.0, False), (42.0, True)]
 _orig_step = step
 def step2():
@@ -106,9 +110,8 @@ def step2():
     if abs(CLK['t'] - T0 - 0.2) < DT / 2 and 'ref' in FLAGS:
         FLAGS['ref']['abort'] = True          # 還沒撥 GUIDED 就誤按 x
     if abs(CLK['t'] - T0 - 41.0) < DT / 2:
-        AC.update({'n': 613.0, 'h': 240.0, 'V': 30.0, 'pitch': 0.0})
-        # 目標從 WP4 重新出發, 飛機在 WP3 → 重現第一趟幾何
-        AC['n'] = 613.0
+        # 目標從起點重新出發, 飛機回到撥 GUIDED 點 (起點後方 613 m) → 重現第一趟幾何
+        AC.update({'s': -613.0, 'h': 240.0, 'V': 30.0, 'pitch': 0.0})
 Rate.sleep = lambda self: step2()
 
 sys.argv = ['x', '--moving', '--no-vision', '--case', 'rearm_test']

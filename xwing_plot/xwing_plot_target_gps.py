@@ -257,6 +257,11 @@ def compare(d, run, bins, out_prefix, max_gap=2.0, after=10.0, leap_seconds=GPS_
     rs = interpolate(g['gps_unix'], g['Spd'], tt, max_gap)
     err_n, err_e = rn - tn, re_ - te
     dist = np.hypot(err_n, err_e)
+    # 沿目標前進方向的前後差 (+ = 車子在虛擬目標前面), 往南 / 往北開都適用
+    _un, _ue = tn[-1] - tn[0], te[-1] - te[0]
+    _ul = np.hypot(_un, _ue)
+    err_trk = (err_n * _un + err_e * _ue) / _ul if _ul > 0 else np.full_like(err_n, np.nan)
+    hdg_deg = float(np.degrees(np.arctan2(_ue, _un)) % 360) if _ul > 0 else float('nan')
     if np.isfinite(dist).sum() < 2:
         raise ValueError('可比較的 GPS 點不足 (BIN 在這段時間有斷訊?)')
     rel = tt - t_dive0
@@ -329,17 +334,19 @@ def compare(d, run, bins, out_prefix, max_gap=2.0, after=10.0, leap_seconds=GPS_
             stats[ph] = dict(mean=float(dist[k].mean()), max=float(dist[k].max()),
                              rmse=float(np.sqrt(np.mean(dist[k] ** 2))),
                              v=float(np.nanmean(rs[k])),
-                             along=float(np.nanmean(err_n[k])), cross=float(np.nanmean(err_e[k])))
+                             along=float(np.nanmean(err_n[k])), cross=float(np.nanmean(err_e[k])),
+                             track=float(np.nanmean(err_trk[k])))
             s = stats[ph]
             lines.append(f'{ph:<8s}: 平均差 {s["mean"]:6.1f} m  最大 {s["max"]:6.1f} m  '
                          f'RMSE {s["rmse"]:6.1f} m  (北向差 {s["along"]:+.1f}, 東向差 {s["cross"]:+.1f}) '
                          f' 車速平均 {s["v"]:.1f} m/s')
     if 'DIVE' in stats:
         s = stats['DIVE']
-        # 往南開: 北向差 > 0 = 車子在虛擬目標北邊 = 車子落後
-        hint = ('車子落後虛擬目標' if s['along'] > 3 else
-                '車子超前虛擬目標' if s['along'] < -3 else '前後大致對齊')
-        lines.append(f'DIVE 段: {hint} (北向差 {s["along"]:+.1f} m, 目標往南開時 + = 車子在後面)')
+        # 沿目標前進方向: + = 車子在前面 (超前), − = 車子在後面 (落後)
+        hint = ('車子落後虛擬目標' if s['track'] < -3 else
+                '車子超前虛擬目標' if s['track'] > 3 else '前後大致對齊')
+        lines.append(f'DIVE 段: {hint} (沿目標方位 {hdg_deg:.0f}° 的前後差 {s["track"]:+.1f} m, '
+                     f'+ = 車子在前面)')
     with open(out_prefix + '_summary.txt', 'w', encoding='utf-8-sig') as f:
         f.write('\n'.join(lines) + '\n')
     return lines, stats

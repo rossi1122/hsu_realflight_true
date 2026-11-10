@@ -198,7 +198,7 @@ class FakeVision:
                 'mode': self.mode, 'detection_age_ms': 30.0, 'angle_age_ms': 5.0,
                 'e2e_ms': 80.0, 'e2e_err_ms': 2.0, 'cap_mono': now - 0.08,
                 'laser_distance_m': laser,                          # 雷射測到真車的斜距
-                'yaw': random.gauss(0, 0.5)}                        # 新格式 V0 系列: 雲台 yaw
+                'yaw': random.gauss(0, 0.3)}                        # V0: 雲台 yaw 置中朝機頭 (小抖動)
 
 import numpy as _np
 F_R_G2C = _np.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]], dtype=float)

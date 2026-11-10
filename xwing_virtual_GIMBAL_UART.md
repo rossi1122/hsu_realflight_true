@@ -85,7 +85,7 @@ python3 uart_mipi_receiver.py --port /dev/ttyUSB0
 | 14–15 | detection_age_ms, angle_age_ms | ms | 送出時辨識結果 / 角度資料的年齡 |
 | 時間戳 | capture_ns, session | — | 取像時間戳 (對方時鐘) + 校時 session (V0 系列、v7、v8) |
 | 雷射 | laser_distance_m | m | 雲台雷射測距 (V0 系列、v8)；5 m 內量不到 → CSV 留空 |
-| yaw | yaw | deg | ★ 雲台 yaw (**只有 V0 系列**，2026/11 新增) |
+| yaw | yaw | deg | ★ 雲台 yaw (**只有 V0 系列**，2026/11 新增)。**相對地面**，且雲台 yaw 一直置中 → 相機永遠朝機頭方向 |
 
 **封包版本 (接收端都能讀，本機自動辨識)：**
 
@@ -128,7 +128,8 @@ python3 uart_mipi_receiver.py --port /dev/ttyUSB0
 | `'1'` | 追蹤 | pitch 自動轉，把目標固定在**畫面正中心** |
 | `'2'` | 鎖定 | pitch 固定在**向下 30°** (與我們原本的做法相同) |
 
-- 對方雲台**只有 pitch 軸**，沒有 yaw，左右永遠跟著機頭。所以原本「遙測沒有 yaw」的缺口不存在了。
+- 對方雲台左右**一直置中、朝機頭方向** (2026/11/10 確認)；V0 系列會回報 yaw (相對地面)，但不會主動轉 yaw。
+  所以分析時相機方位一律用**飛機航向**，`vis_gimbal_yaw` 只記錄下來檢查 (Fig 8)，不參與投影計算，也不影響鎖定判斷 (只看 pitch)。
 - pitch **往下為負**：鎖定時對方回報約 **−30**。
 
 **為什麼是 PRE_DIVE 就鎖定 −30°**：推頭距離是 240 / tan 30° = 415.69 m，
@@ -314,7 +315,7 @@ python3 xwing_virtual_flight.py --moving --no-vision
 | `vis_tgt_cx/cy`、`vis_off_x/y` | 對方原始像素值 |
 | `vis_fx/fy/cx/cy`、`vis_img_w/h` | 對方送來的內參 |
 | `vis_gimbal_pitch/roll`、`vis_gimbal_mode` | 雲台角度、對方回報的模式 |
-| `vis_gimbal_yaw` | 雲台 yaw (度)；只有新格式 V0 系列有，舊版留空 |
+| `vis_gimbal_yaw` | 雲台 yaw (度，相對地面；雲台一直置中朝機頭)；只有新格式 V0 系列有，舊版留空。只記錄供檢查，不參與計算 |
 | `vis_det_age_ms`、`vis_angle_age_ms` | 對方送出時資料的年齡 |
 | `vis_e2e_ms`、`vis_e2e_err_ms` | 有時間戳的版本：取像 → 本機收到的延遲與校時誤差 |
 | `vis_cap_age_ms` | 有時間戳的版本：控制這一拍時，影像已經多舊 |

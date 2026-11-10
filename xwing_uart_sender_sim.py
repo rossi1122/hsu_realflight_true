@@ -7,7 +7,7 @@ xwing_uart_sender_sim.py — 模擬對方實驗室 Orin NX 的 UART 發送端 (�
 
   · 以 --hz 送遙測封包 (格式與 uart_mipi_receiver.py「共用雲台接收端 V6」完全相同, CRC-16/CCITT-FALSE);
     預設 --version 0 (新格式 V0 系列: 時間戳 + 雷射距離 + 雲台 yaw, 91 B), 可選 1~5、10;
-    雷射距離 --laser-m, 每 3 s 有 1 s 量不到 = NaN; yaw 在 ±--yaw-amp 度間慢慢擺動;
+    雷射距離 --laser-m, 每 3 s 有 1 s 量不到 = NaN; yaw 一直置中 (朝機頭), 只有 ±--yaw-amp 度的小抖動;
     --version 8 / 7 送舊格式 (v8 = 時間戳 + 雷射距離, 沒有 yaw; v7 = 只有時間戳)
   · 回覆校時請求 (flags=1 → flags=2), version 新格式 = 資料封包同一個, 舊格式 = 7;
     自己的時鐘故意加一個偏移, 驗證校時有效
@@ -110,8 +110,8 @@ class Sim:
         if a.version != 7:                     # V0 系列 / v8: 雷射距離
             laser = a.laser_m + 5.0 * math.sin(0.2 * t) if (t % 3.0) >= 1.0 else float('nan')
             payload += struct.pack('>f', laser)
-        if a.version in NEW_VERSIONS:          # V0 系列: 雲台 yaw (度)
-            payload += struct.pack('>f', a.yaw_amp * math.sin(0.1 * t))
+        if a.version in NEW_VERSIONS:          # V0 系列: 雲台 yaw (度), 一直置中朝機頭
+            payload += struct.pack('>f', a.yaw_amp * math.sin(1.3 * t))
         return _frame(a.version, 0, payload)
 
     def handle_rx(self, data):
@@ -164,8 +164,8 @@ def main():
     ap.add_argument('--version', type=int, choices=NEW_VERSIONS + (7, 8), default=0,
                     help='遙測封包版本 (預設 0 = 新格式, 含雷射距離 + yaw; 7 / 8 = 舊格式)')
     ap.add_argument('--laser-m', type=float, default=300.0, help='模擬雷射距離 m (預設 300; v7 沒有)')
-    ap.add_argument('--yaw-amp', type=float, default=10.0,
-                    help='新格式模擬雲台 yaw 擺動幅度 ° (預設 10)')
+    ap.add_argument('--yaw-amp', type=float, default=0.3,
+                    help='新格式雲台 yaw 置中時的小抖動幅度 ° (預設 0.3)')
     ap.add_argument('--slew-dps', type=float, default=40.0,
                     help='雲台 pitch 轉動速度 °/s (預設 40)')
     ap.add_argument('--lock-pitch', type=float, default=-30.0,

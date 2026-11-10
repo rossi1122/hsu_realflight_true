@@ -149,7 +149,8 @@ VISION_CSV_FIELDS = [
     'vis_tgt_cx', 'vis_tgt_cy', 'vis_off_x', 'vis_off_y',
     'vis_fx', 'vis_fy', 'vis_cx', 'vis_cy', 'vis_img_w', 'vis_img_h',
     'vis_gimbal_pitch', 'vis_gimbal_roll',
-    'vis_gimbal_yaw',    # V0 系列: 雲台 yaw (度); 舊版 v6/v7/v8 留空
+    'vis_gimbal_yaw',    # V0 系列: 雲台 yaw (度, 相對地面; 雲台一直置中 = 相機朝機頭); 舊版留空.
+                         #   只記錄供檢查: 相機方位一律用飛機航向, 鎖定判斷只看 pitch
     'vis_gimbal_mode',
     'vis_det_age_ms', 'vis_angle_age_ms',  # 對方送出時, 辨識 / 角度資料的年齡
     'vis_e2e_ms', 'vis_e2e_err_ms',      # 有時間戳的版本: 取像 → 本機收到 (含校時誤差)

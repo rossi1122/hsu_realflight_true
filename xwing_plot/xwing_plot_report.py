@@ -991,7 +991,7 @@ def figP7_loop_error(R, path, title, pdf, gimb):
 
 
 def figP8_gimbal(R, path, title, pdf):
-    """Fig 8  雲台姿態 (pitch / roll) + 模式, t = 0 在撥 GUIDED."""
+    """Fig 8  雲台姿態 (pitch / roll / yaw) + 模式 (+ 雷射距離), t = 0 在撥 GUIDED."""
     L, t = R.L, R.t
     if not (L.has('vis_gimbal_pitch') or L.has('vis_link')):
         return False
@@ -999,48 +999,53 @@ def figP8_gimbal(R, path, title, pdf):
     x1 = (sp[1] + 2.0) if sp else _guided_end(R)
     w = (t >= 0) & (t <= x1)
     las = L.num('vis_laser_m') if L.has('vis_laser_m') else None
-    has_las = las is not None and np.isfinite(las[w]).any()   # v8 才有雷射距離
-    fig, ax = plt.subplots(4 if has_las else 3, 1, figsize=(10, 11.5 if has_las else 9),
-                           layout='constrained',
-                           gridspec_kw=dict(height_ratios=[1.2, 1, .7, 1] if has_las else [1.2, 1, .7]))
+    has_las = las is not None and np.isfinite(las[w]).any()   # V0 系列 / v8 才有雷射距離
+    gy = L.num('vis_gimbal_yaw') if L.has('vis_gimbal_yaw') else None
+    has_yaw = gy is not None and np.isfinite(gy[w]).any()     # 新格式 V0 系列才有 yaw
+    # 面板: pitch / roll / (yaw) / mode / (laser)
+    keys = ['pitch', 'roll'] + (['yaw'] if has_yaw else []) + ['mode'] + (['laser'] if has_las else [])
+    hr = {'pitch': 1.2, 'roll': 1, 'yaw': 1, 'mode': .7, 'laser': 1}
+    fig, axs = plt.subplots(len(keys), 1, figsize=(10, 2.2 + 2.3 * len(keys)), layout='constrained',
+                            gridspec_kw=dict(height_ratios=[hr[k] for k in keys]))
+    ax = dict(zip(keys, axs))
     gp = L.num('vis_gimbal_pitch')
     lock, tol = C('GIMBAL_LOCK_PITCH_DEG'), C('GIMBAL_LOCK_TOL_DEG')
-    ax[0].plot(t[w], gp[w], color=C_BLK, lw=1.8, label='gimbal pitch (earth-ref)')
-    ax[0].axhspan(lock - tol, lock + tol, color='#7D3C98', alpha=.10)
-    ax[0].axhline(lock, color='#7D3C98', ls='--', lw=1.2, label=f'lock {lock:g}° ± {tol:g}°')
-    ax[1].plot(t[w], L.num('vis_gimbal_roll')[w], color=C_BLK, lw=1.8, label='gimbal roll')
-    gy = L.num('vis_gimbal_yaw') if L.has('vis_gimbal_yaw') else None
-    has_yaw = gy is not None and np.isfinite(gy[w]).any()   # 新格式 V0 系列才有 yaw
+    ax['pitch'].plot(t[w], gp[w], color=C_BLK, lw=1.8, label='gimbal pitch (earth-ref)')
+    ax['pitch'].axhspan(lock - tol, lock + tol, color='#7D3C98', alpha=.10)
+    ax['pitch'].axhline(lock, color='#7D3C98', ls='--', lw=1.2, label=f'lock {lock:g}° ± {tol:g}°')
+    ax['roll'].plot(t[w], L.num('vis_gimbal_roll')[w], color=C_BLK, lw=1.8, label='gimbal roll')
     if has_yaw:
-        ax[1].plot(t[w], gy[w], '--', color=C_TRK, lw=1.5, label='gimbal yaw (rel. body)')
-    ax[2].plot(t[w], L.num('vis_gimbal_mode')[w], color=C_BLK, lw=1.8, drawstyle='steps-post',
-               label='reported')
-    ax[2].plot(t[w], L.num('gimbal_mode_req')[w], '--', color=C_TRK, lw=1.5, drawstyle='steps-post',
-               label='requested')
-    ax[2].set_yticks([0, 1, 2], ['0 manual', '1 track', '2 lock'])
+        # 對方確認 (2026/11/10): yaw 相對地面, 雲台 yaw 一直置中 = 相機永遠朝機頭方向.
+        #   → 分析裡相機方位一律用飛機航向 (本圖只畫回報值供檢查, 不用來算投影)
+        ax['yaw'].plot(t[w], gy[w], color=C_BLK, lw=1.8, label='gimbal yaw (reported)')
+        ax['yaw'].axhline(0, color='#7D3C98', ls='--', lw=1.2, label='centered = aircraft nose')
+    ax['mode'].plot(t[w], L.num('vis_gimbal_mode')[w], color=C_BLK, lw=1.8, drawstyle='steps-post',
+                    label='reported')
+    ax['mode'].plot(t[w], L.num('gimbal_mode_req')[w], '--', color=C_TRK, lw=1.5,
+                    drawstyle='steps-post', label='requested')
+    ax['mode'].set_yticks([0, 1, 2], ['0 manual', '1 track', '2 lock'])
     req = L.num('gimbal_mode_req')
     kr = np.where(w & (req == 2))[0]
     if len(kr):
         tr = t[kr[0]]
         lk = np.where(w & (t >= tr) & (L.num('gimbal_locked') > 0))[0]
-        for a in ax:
+        for a in axs:
             a.axvline(tr, color='#7D3C98', ls='-.', lw=1.5)
             if len(lk):
                 a.axvline(t[lk[0]], color='#1E8449', ls='-.', lw=1.5)
         txt = f'LOCK requested\nt = {tr:.2f} s'
         if len(lk):
             txt += f'\nlocked +{t[lk[0]] - tr:.2f} s'
-        ax[0].text(tr, .95, ' ' + txt, transform=ax[0].get_xaxis_transform(), va='top', fontsize=9,
-                   color='#7D3C98', bbox=dict(boxstyle='round', fc='white', ec='#7D3C98'))
-    panels = [(ax[0], '(a) Gimbal pitch', 'Pitch (deg)'),
-              (ax[1], '(b) Gimbal roll / yaw' if has_yaw else '(b) Gimbal roll',
-               'Angle (deg)' if has_yaw else 'Roll (deg)'),
-              (ax[2], '(c) Gimbal mode', 'Mode')]
+        ax['pitch'].text(tr, .95, ' ' + txt, transform=ax['pitch'].get_xaxis_transform(), va='top',
+                         fontsize=9, color='#7D3C98', bbox=dict(boxstyle='round', fc='white', ec='#7D3C98'))
     if has_las:
-        ax[3].plot(t[w], las[w], '.', color=C_BLK, ms=2.5, label='gimbal laser range')
-        ax[3].plot(t[w], L.num('slant_m')[w], '--', color=C_TRK, lw=1.5,
-                   label='slant range to virtual target')
-        panels.append((ax[3], '(d) Laser range', 'Range (m)'))
+        ax['laser'].plot(t[w], las[w], '.', color=C_BLK, ms=2.5, label='gimbal laser range')
+        ax['laser'].plot(t[w], L.num('slant_m')[w], '--', color=C_TRK, lw=1.5,
+                         label='slant range to virtual target')
+    names = {'pitch': ('Gimbal pitch', 'Pitch (deg)'), 'roll': ('Gimbal roll', 'Roll (deg)'),
+             'yaw': ('Gimbal yaw (earth-ref, held centered on aircraft nose)', 'Yaw (deg)'),
+             'mode': ('Gimbal mode', 'Mode'), 'laser': ('Laser range', 'Range (m)')}
+    panels = [(ax[k], f'({chr(97 + i)}) {names[k][0]}', names[k][1]) for i, k in enumerate(keys)]
     for a, ttl, yl in panels:
         _bands(a, R, x0=0, x1=x1)
         a.set_xlim(0, x1)
@@ -1118,7 +1123,8 @@ def figP9_traj(R, path, title, pdf, car):
 
 
 # ─────────────────────────── 雲台資料 → 控制命令 (離線重放) ───────────────────────────
-# 雲台模型: pitch / roll 相對地面 (自穩), yaw 跟機頭 (沒有 yaw 軸).
+# 雲台模型: pitch / roll 相對地面 (自穩), yaw 跟機頭.
+#   (2026/11/10 對方確認: V0 回報的 yaw 相對地面, 但雲台 yaw 一直置中 → 相機永遠朝機頭方向)
 # 把雲台相機看到的目標方向, 轉到 DIVE 用的虛擬相機 (機身固定, 光軸 = 機頭, roll=0,
 # 與 dive_guidance.project_body_camera 同一條旋轉鏈), 再丟進同一套 DivePID.
 _R_G2C = np.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]], dtype=float)
